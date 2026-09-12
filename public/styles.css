@@ -14,7 +14,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#08121d
 button.danger{border-color:#5a2b2b;color:#ff9c8e}
 .wrap{padding:18px 22px;max-width:1500px;margin:0 auto}
 .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
-input,select,textarea{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit}
+input,select,textarea{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;min-width:0;max-width:100%}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .cats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
 .chip{border-radius:999px;padding:7px 14px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:13px;display:flex;gap:8px;align-items:center}
@@ -34,7 +34,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:0;width:min(820px,94vw)}
 dialog::backdrop{background:rgba(0,0,0,.6)}
 .dlg-head{padding:16px 18px;border-bottom:1px solid var(--line);font-weight:600}
-.dlg-body{padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:12px;max-height:70vh;overflow:auto}
+.dlg-body{padding:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:12px;max-height:70vh;overflow-y:auto;overflow-x:hidden}
 .dlg-foot{padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:10px}
 label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
 .full{grid-column:1/-1}
@@ -43,7 +43,7 @@ label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute
 .stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;font-size:13px;color:var(--muted)}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px}
 .stat b{color:var(--text)}
-.einsatz{display:grid;grid-template-columns:1.3fr 1.2fr .9fr 1.2fr auto;gap:8px;margin-bottom:8px}
+.einsatz{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr)) auto;gap:8px;margin-bottom:8px;align-items:center}
 .einsatz button{padding:8px 10px}
 .login{max-width:360px;margin:14vh auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px}
 .login h2{margin:0 0 6px;font-size:18px}
