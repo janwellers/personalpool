@@ -1,0 +1,254 @@
+const FARBEN = {
+  gut: "var(--gut)",
+  schlecht: "var(--schlecht)",
+  nochmal: "var(--nochmal)",
+  finger: "var(--finger)",
+  student: "var(--student)",
+};
+const MOBILITAET = ["eigener PKW", "Führerschein, kein PKW", "ÖPNV", "Fahrrad / fußläufig", "keine Mobilität"];
+
+let kategorien = [];
+let daten = [];
+let filterKat = "alle";
+let editId = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const katOf = (id) => kategorien.find((k) => k.id === id) || kategorien[0] || { id, label: id };
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
+  return data;
+}
+
+// ---------- Login ----------
+$("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("loginError").textContent = "";
+  try {
+    await api("/api/login", { method: "POST", body: { password: e.target.password.value } });
+    await start();
+  } catch (err) {
+    $("loginError").textContent = err.message;
+  }
+});
+
+$("btnLogout").onclick = async () => {
+  await api("/api/logout", { method: "POST" });
+  location.reload();
+};
+
+// ---------- Auswahlfelder ----------
+function fillSelects() {
+  $("selKat").innerHTML = kategorien.map((k) => `<option value="${k.id}">${esc(k.label)}</option>`).join("");
+  $("selMobil").innerHTML = `<option value="">–</option>` + MOBILITAET.map((m) => `<option>${m}</option>`).join("");
+  $("fMobil").innerHTML = `<option value="">Mobilität: egal</option>` + MOBILITAET.map((m) => `<option>${m}</option>`).join("");
+}
+
+// ---------- Einsatz-Zeilen im Formular ----------
+function addEinsatzRow(e = {}) {
+  const div = document.createElement("div");
+  div.className = "einsatz";
+  div.innerHTML = `
+    <input placeholder="Unternehmen" data-f="unternehmen" />
+    <input placeholder="Tätigkeit" data-f="taetigkeit" />
+    <input placeholder="Zeitraum" data-f="zeitraum" />
+    <input placeholder="Ergebnis" data-f="ergebnis" />
+    <button type="button" title="Zeile entfernen">✕</button>`;
+  div.querySelectorAll("input").forEach((i) => (i.value = e[i.dataset.f] || ""));
+  div.querySelector("button").onclick = () => div.remove();
+  $("einsaetze").appendChild(div);
+}
+$("btnAddEinsatz").onclick = () => addEinsatzRow();
+
+function readEinsaetze() {
+  return [...$("einsaetze").querySelectorAll(".einsatz")]
+    .map((row) => Object.fromEntries([...row.querySelectorAll("input")].map((i) => [i.dataset.f, i.value.trim()])))
+    .filter((e) => e.unternehmen || e.taetigkeit || e.zeitraum || e.ergebnis);
+}
+
+// ---------- Darstellung ----------
+function renderCats() {
+  const items = [{ id: "alle", label: "Alle" }, ...kategorien];
+  $("cats").innerHTML = items
+    .map((k) => {
+      const n = k.id === "alle" ? daten.length : daten.filter((m) => m.kategorie === k.id).length;
+      const color = k.id === "alle" ? "var(--accent)" : FARBEN[k.id] || "var(--accent)";
+      return `<div class="chip ${filterKat === k.id ? "active" : ""}" data-kat="${k.id}">
+        <span class="dot" style="background:${color}"></span>${esc(k.label)} <b>${n}</b></div>`;
+    })
+    .join("");
+  $("cats").querySelectorAll(".chip").forEach((c) => (c.onclick = () => { filterKat = c.dataset.kat; render(); }));
+}
+
+function renderStats() {
+  $("stats").innerHTML = `
+    <div class="stat">Gesamt: <b>${daten.length}</b></div>
+    <div class="stat">Mit Staplerschein: <b>${daten.filter((m) => m.staplerschein).length}</b></div>
+    <div class="stat">Wiedereinstellbar: <b>${daten.filter((m) => m.wiedereinstellbar).length}</b></div>`;
+}
+
+function passt(m) {
+  if (filterKat !== "alle" && m.kategorie !== filterKat) return false;
+  const s = $("fStapler").value;
+  if (s === "ja" && !m.staplerschein) return false;
+  if (s === "nein" && m.staplerschein) return false;
+  const mo = $("fMobil").value;
+  if (mo && m.mobilitaet !== mo) return false;
+  const q = $("q").value.trim().toLowerCase();
+  return !q || JSON.stringify(m).toLowerCase().includes(q);
+}
+
+function zeile(label, wert) {
+  return wert ? `<div class="row"><span>${label}</span><span>${esc(wert)}</span></div>` : "";
+}
+
+function render() {
+  renderCats();
+  renderStats();
+  const sort = $("fSort").value;
+  const liste = daten.filter(passt).sort((a, b) => {
+    if (sort === "bewertung") return (Number(b.bewertung) || 0) - (Number(a.bewertung) || 0);
+    if (sort === "kategorie") return kategorien.findIndex((k) => k.id === a.kategorie) - kategorien.findIndex((k) => k.id === b.kategorie);
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  $("empty").hidden = liste.length > 0;
+  $("empty").textContent = daten.length === 0
+    ? "Noch keine Mitarbeiter erfasst. Lege oben rechts den ersten an."
+    : "Keine Treffer für diesen Filter.";
+
+  $("grid").innerHTML = liste
+    .map((m) => {
+      const k = katOf(m.kategorie);
+      const color = FARBEN[k.id] || "var(--accent)";
+      const tags = [
+        m.staplerschein && "Staplerschein",
+        m.schichtbereit && "Schichtbereit",
+        m.wiedereinstellbar && "Wiedereinstellbar",
+      ].filter(Boolean);
+      const einsaetze = (m.einsaetze || []).map(
+        (e) => `<li>${esc([e.unternehmen, e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" | "))}</li>`
+      );
+      return `<div class="card" style="border-left-color:${color}">
+        <h3>${esc(m.name)}</h3>
+        <span class="badge" style="background:${color}">${esc(k.label)}${m.bewertung ? " · " + "★".repeat(Number(m.bewertung)) : ""}</span>
+        <div style="margin-top:10px">
+          ${zeile("Sprache", m.sprachen)}
+          ${zeile("Nationalität", m.nationalitaet)}
+          ${zeile("Wohnort", m.wohnort)}
+          ${zeile("Mobilität", m.mobilitaet)}
+          ${zeile("Verfügbar ab", m.verfuegbar)}
+          ${zeile("Kontakt", m.kontakt)}
+        </div>
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>` : ""}
+        ${m.vorerfahrung ? `<div style="margin-top:8px;font-size:13px"><b>Kann:</b> ${esc(m.vorerfahrung)}</div>` : ""}
+        ${einsaetze.length ? `<div style="margin-top:8px;font-size:13px"><b>Einsätze:</b><ul style="margin:6px 0 0 18px;padding:0">${einsaetze.join("")}</ul></div>` : ""}
+        ${m.notiz ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">Notiz: ${esc(m.notiz)}</div>` : ""}
+        <div class="actions"><button data-edit="${m.id}">Bearbeiten</button></div>
+      </div>`;
+    })
+    .join("");
+
+  $("grid").querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => openDialog(b.dataset.edit)));
+}
+
+// ---------- Dialog ----------
+const form = $("form");
+
+function openDialog(id) {
+  editId = id || null;
+  form.reset();
+  $("formError").textContent = "";
+  $("einsaetze").innerHTML = "";
+  const m = daten.find((x) => x.id === id);
+  $("dlgTitle").textContent = m ? "Mitarbeiter bearbeiten" : "Mitarbeiter anlegen";
+  $("btnDelete").hidden = !m;
+  if (m) {
+    for (const el of form.elements) {
+      if (!el.name) continue;
+      if (el.type === "checkbox") el.checked = Boolean(m[el.name]);
+      else el.value = m[el.name] ?? "";
+    }
+    (m.einsaetze || []).forEach(addEinsatzRow);
+  }
+  if (!$("einsaetze").children.length) addEinsatzRow();
+  $("dlg").showModal();
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(form).entries());
+  ["staplerschein", "schichtbereit", "wiedereinstellbar"].forEach((k) => (body[k] = form.elements[k].checked));
+  body.einsaetze = readEinsaetze();
+  try {
+    if (editId) await api(`/api/employees/${editId}`, { method: "PUT", body });
+    else await api("/api/employees", { method: "POST", body });
+    await reload();
+    $("dlg").close();
+  } catch (err) {
+    $("formError").textContent = err.message;
+  }
+});
+
+$("btnCancel").onclick = () => $("dlg").close();
+$("btnNew").onclick = () => openDialog(null);
+$("btnDelete").onclick = async () => {
+  if (!confirm("Diesen Mitarbeiter wirklich löschen?")) return;
+  try {
+    await api(`/api/employees/${editId}`, { method: "DELETE" });
+    await reload();
+    $("dlg").close();
+  } catch (err) {
+    $("formError").textContent = err.message;
+  }
+};
+
+["q", "fStapler", "fMobil", "fSort"].forEach((id) => $(id).addEventListener("input", render));
+
+// ---------- CSV-Export ----------
+$("btnExportCsv").onclick = () => {
+  const cols = ["name", "kategorie", "bewertung", "sprachen", "nationalitaet", "wohnort", "mobilitaet",
+    "staplerschein", "schichtbereit", "wiedereinstellbar", "vorerfahrung", "einsaetze", "kontakt", "verfuegbar", "notiz"];
+  const wert = (m, c) => {
+    if (c === "kategorie") return katOf(m.kategorie).label;
+    if (c === "einsaetze") return (m.einsaetze || []).map((e) => [e.unternehmen, e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" | ")).join(" ; ");
+    return m[c];
+  };
+  const cell = (v) => `"${String(v ?? "").replace(/"/g, '""').replace(/\n/g, "; ")}"`;
+  const csv = [cols.join(";"), ...daten.map((m) => cols.map((c) => cell(wert(m, c))).join(";"))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv" }));
+  a.download = "mitarbeiter.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// ---------- Start ----------
+async function reload() {
+  daten = (await api("/api/employees")).employees;
+  render();
+}
+
+async function start() {
+  const session = await api("/api/session");
+  if (!session.authed) {
+    $("loginView").hidden = false;
+    $("appView").hidden = true;
+    if (session.usesDevDefault) $("loginError").textContent = 'Entwicklungsmodus – Passwort: "demo"';
+    return;
+  }
+  $("loginView").hidden = true;
+  $("appView").hidden = false;
+  kategorien = (await api("/api/kategorien")).kategorien;
+  fillSelects();
+  await reload();
+}
+
+start();

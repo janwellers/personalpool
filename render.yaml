@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: personalpool
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.1"
+      - key: NODE_ENV
+        value: production
+      # Postgres (z. B. Neon oder Supabase). Ohne DATABASE_URL wird lokal eine JSON-Datei genutzt.
+      - key: DATABASE_URL
+        sync: false
+      # Passwort für den Zugang zur App. Im Render-Dashboard eintragen.
+      - key: APP_PASSWORD
+        sync: false
+      - key: APP_SECRET
+        generateValue: true

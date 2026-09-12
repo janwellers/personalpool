@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mitarbeiter-Kategorisierung</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<section id="loginView" hidden>
+  <div class="login">
+    <h2>Anmelden</h2>
+    <div class="hint">Mitarbeiter-Kategorisierung für die Personaldienstleistung</div>
+    <form id="loginForm">
+      <input type="password" name="password" placeholder="Passwort" autocomplete="current-password" required />
+      <div class="error" id="loginError"></div>
+      <button class="primary" type="submit">Anmelden</button>
+    </form>
+  </div>
+</section>
+
+<section id="appView" hidden>
+  <header>
+    <div>
+      <h1>Mitarbeiter-Kategorisierung</h1>
+      <div class="sub">Personaldienstleistung – Bewertung, Qualifikationen und Einsatzhistorie</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="primary" id="btnNew">+ Mitarbeiter</button>
+      <button id="btnExportCsv">Export CSV</button>
+      <button id="btnLogout">Abmelden</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="stats" id="stats"></div>
+    <div class="cats" id="cats"></div>
+
+    <div class="toolbar">
+      <input id="q" placeholder="Suche: Name, Sprache, Ort, Firma, Erfahrung …" style="flex:1;min-width:240px" />
+      <select id="fStapler">
+        <option value="">Staplerschein: egal</option>
+        <option value="ja">mit Staplerschein</option>
+        <option value="nein">ohne Staplerschein</option>
+      </select>
+      <select id="fMobil"></select>
+      <select id="fSort">
+        <option value="name">Sortieren: Name</option>
+        <option value="kategorie">Sortieren: Kategorie</option>
+        <option value="bewertung">Sortieren: Bewertung</option>
+      </select>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" hidden></div>
+  </div>
+</section>
+
+<dialog id="dlg">
+  <form id="form">
+    <div class="dlg-head" id="dlgTitle">Mitarbeiter anlegen</div>
+    <div class="dlg-body">
+      <label class="full">Name *<input name="name" required placeholder="Max Mustermann" /></label>
+
+      <label>Kategorie *<select name="kategorie" id="selKat" required></select></label>
+      <label>Bewertung (1–5)
+        <select name="bewertung">
+          <option value="">–</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+        </select>
+      </label>
+
+      <label>Sprache(n)<input name="sprachen" placeholder="Deutsch (B2), Polnisch, Englisch" /></label>
+      <label>Nationalität<input name="nationalitaet" placeholder="z. B. Rumänien" /></label>
+
+      <label>Wohnort<input name="wohnort" placeholder="PLZ / Stadt" /></label>
+      <label>Mobilität<select name="mobilitaet" id="selMobil"></select></label>
+
+      <div class="chkrow full">
+        <label><input type="checkbox" name="staplerschein" /> Staplerschein</label>
+        <label><input type="checkbox" name="schichtbereit" /> Schichtbereit</label>
+        <label><input type="checkbox" name="wiedereinstellbar" /> Wiedereinstellbar</label>
+      </div>
+
+      <label class="full">Was konnte er/sie? – Qualifikationen &amp; Vorerfahrung
+        <textarea name="vorerfahrung" rows="3" placeholder="z. B. 4 Jahre Kommissionierung, Scannererfahrung, Schubmaststapler"></textarea>
+      </label>
+
+      <div class="full">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Was hat er/sie gemacht? – Einsätze</div>
+        <div id="einsaetze"></div>
+        <button type="button" id="btnAddEinsatz">+ Einsatz</button>
+      </div>
+
+      <label>Kontakt<input name="kontakt" placeholder="Telefon / E-Mail" /></label>
+      <label>Verfügbar ab<input name="verfuegbar" type="date" /></label>
+
+      <label class="full">Interne Notiz (Grund für die Kategorie)
+        <textarea name="notiz" rows="2" placeholder="z. B. zuverlässig, aber nur Frühschicht"></textarea>
+      </label>
+
+      <div class="error full" id="formError"></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="danger" id="btnDelete" hidden>Löschen</button>
+      <div style="margin-left:auto;display:flex;gap:10px">
+        <button type="button" id="btnCancel">Abbrechen</button>
+        <button type="submit" class="primary">Speichern</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
