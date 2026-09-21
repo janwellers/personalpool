@@ -218,6 +218,29 @@ export async function initStore() {
   await pool.query("CREATE INDEX IF NOT EXISTS employee_events_employee_idx ON employee_events (employee_id, created_at DESC)");
 }
 
+const schluessel = (s) =>
+  String(s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+export async function findDuplicates(name, kontakt, exceptId = null) {
+  const nameKey = schluessel(name);
+  const nameSorted = nameKey.split(" ").sort().join(" ");
+  const kontaktKey = schluessel(kontakt).replace(/\s+/g, "");
+  if (!nameKey) return [];
+  const alle = await listEmployees();
+  return alle.filter((m) => {
+    if (m.id === exceptId) return false;
+    const k = schluessel(m.name);
+    if (k === nameKey || k.split(" ").sort().join(" ") === nameSorted) return true;
+    const mk = schluessel(m.kontakt).replace(/\s+/g, "");
+    return Boolean(kontaktKey) && kontaktKey.length >= 5 && mk === kontaktKey;
+  });
+}
+
 export async function getEmployee(id) {
   if (usePg) {
     const { rows } = await pool.query("SELECT * FROM employees WHERE id = $1", [id]);

@@ -44,7 +44,12 @@ async function api(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Fehler ${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -182,6 +187,54 @@ function render() {
   $("grid").querySelectorAll("[data-log]").forEach((b) => (b.onclick = () => openLog(b.dataset.log)));
 }
 
+// ---------- Kundenansicht ----------
+function kundenListe() {
+  const map = new Map();
+  for (const m of daten) {
+    for (const e of m.einsaetze || []) {
+      const firma = (e.unternehmen || "").trim();
+      if (!firma) continue;
+      const key = firma.toLowerCase();
+      if (!map.has(key)) map.set(key, { firma, eintraege: [] });
+      map.get(key).eintraege.push({ mitarbeiter: m, einsatz: e });
+    }
+  }
+  return [...map.values()].sort((a, b) => b.eintraege.length - a.eintraege.length || a.firma.localeCompare(b.firma));
+}
+
+function renderKunden() {
+  const q = $("kundenSuche").value.trim().toLowerCase();
+  const liste = kundenListe().filter((k) => !q || k.firma.toLowerCase().includes(q));
+  $("kundenBody").innerHTML = liste.length
+    ? liste
+        .map((k) => {
+          const zeilen = k.eintraege
+            .map(({ mitarbeiter: m, einsatz: e }) => {
+              const kat = katOf(m.kategorie);
+              const color = FARBEN[kat.id] || "var(--accent)";
+              const detail = [e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" · ");
+              return `<li><b>${esc(m.name)}</b> <span class="tag" style="border-color:${color};color:${color}">${esc(kat.label)}</span>${
+                detail ? ` – ${esc(detail)}` : ""
+              }</li>`;
+            })
+            .join("");
+          return `<div class="logitem">
+            <div class="logmeta"><b style="color:var(--text);font-size:14px">${esc(k.firma)}</b> · ${k.eintraege.length} Einsatz/Einsätze</div>
+            <ul>${zeilen}</ul>
+          </div>`;
+        })
+        .join("")
+    : "<div class='empty'>Keine Einsätze mit Unternehmen erfasst.</div>";
+}
+
+$("btnKunden").onclick = () => {
+  $("kundenSuche").value = "";
+  renderKunden();
+  $("dlgKunden").showModal();
+};
+$("kundenSuche").addEventListener("input", renderKunden);
+$("btnKundenClose").onclick = () => $("dlgKunden").close();
+
 // ---------- Änderungsverlauf ----------
 const zeitpunkt = (iso) => new Date(iso).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
 
@@ -253,7 +306,21 @@ form.addEventListener("submit", async (e) => {
   body.einsaetze = readEinsaetze();
   try {
     if (editId) await api(`/api/employees/${editId}`, { method: "PUT", body });
-    else await api("/api/employees", { method: "POST", body });
+    else {
+      try {
+        await api("/api/employees", { method: "POST", body });
+      } catch (err) {
+        if (err.status !== 409) throw err;
+        const treffer = (err.data.duplikate || [])
+          .map((d) => `• ${d.name}${d.wohnort ? `, ${d.wohnort}` : ""}${d.kontakt ? `, ${d.kontakt}` : ""} (${katOf(d.kategorie).label})`)
+          .join("\n");
+        if (!confirm(`Möglicher Doppeleintrag:\n\n${treffer}\n\nTrotzdem neu anlegen?`)) {
+          $("formError").textContent = "Nicht angelegt – möglicher Doppeleintrag.";
+          return;
+        }
+        await api("/api/employees", { method: "POST", body: { ...body, force: true } });
+      }
+    }
     await reload();
     $("dlg").close();
   } catch (err) {

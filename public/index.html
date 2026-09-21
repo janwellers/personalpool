@@ -29,6 +29,7 @@
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="primary" id="btnNew">+ Mitarbeiter</button>
+      <button id="btnKunden">Kunden</button>
       <button id="btnLog">Verlauf</button>
       <button id="btnExportCsv">Export CSV</button>
       <button id="btnBearbeiter" title="Name für den Änderungsverlauf ändern"></button>
@@ -112,6 +113,17 @@
       </div>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlgKunden">
+  <div class="dlg-head">Einsätze nach Unternehmen</div>
+  <div class="dlg-body log">
+    <input id="kundenSuche" placeholder="Unternehmen suchen …" style="width:100%;margin-bottom:12px" />
+    <div id="kundenBody"></div>
+  </div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnKundenClose">Schließen</button></div>
+  </div>
 </dialog>
 
 <dialog id="dlgLog">

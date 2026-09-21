@@ -8,6 +8,7 @@ import {
   updateEmployee,
   deleteEmployee,
   listEvents,
+  findDuplicates,
   storageBackend,
   KATEGORIEN,
 } from "./store.js";
@@ -66,6 +67,16 @@ app.post("/api/employees", requireAuth, async (req, res, next) => {
   try {
     if (!String(req.body?.name || "").trim()) {
       return res.status(400).json({ ok: false, error: "Name fehlt." });
+    }
+    if (!req.body?.force) {
+      const duplikate = await findDuplicates(req.body.name, req.body.kontakt);
+      if (duplikate.length) {
+        return res.status(409).json({
+          ok: false,
+          error: "Möglicherweise schon vorhanden.",
+          duplikate: duplikate.map((m) => ({ id: m.id, name: m.name, kategorie: m.kategorie, wohnort: m.wohnort, kontakt: m.kontakt })),
+        });
+      }
     }
     res.status(201).json({ ok: true, employee: await createEmployee(req.body, akteurOf(req)) });
   } catch (err) {
