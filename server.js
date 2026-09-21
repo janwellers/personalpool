@@ -9,6 +9,7 @@ import {
   deleteEmployee,
   listEvents,
   findDuplicates,
+  getEmployee,
   listDocuments,
   addDocument,
   getDocument,
@@ -159,6 +160,28 @@ app.delete("/api/documents/:id", requireAuth, async (req, res, next) => {
     const removed = await deleteDocument(req.params.id, akteurOf(req));
     if (!removed) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DSGVO-Auskunft: alle gespeicherten Daten einer Person als Datei.
+app.get("/api/employees/:id/auskunft", requireAuth, async (req, res, next) => {
+  try {
+    const employee = await getEmployee(req.params.id);
+    if (!employee) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
+    const auskunft = {
+      erstelltAm: new Date().toISOString(),
+      hinweis:
+        "Auskunft nach Art. 15 DSGVO: alle zu dieser Person gespeicherten Daten, inkl. Änderungsverlauf und Dokumentenliste.",
+      stammdaten: employee,
+      aenderungsverlauf: await listEvents({ employeeId: employee.id, limit: 500 }),
+      dokumente: await listDocuments(employee.id),
+    };
+    const datei = `auskunft-${employee.name.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase() || "mitarbeiter"}.json`;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(datei)}`);
+    res.send(JSON.stringify(auskunft, null, 2));
   } catch (err) {
     next(err);
   }

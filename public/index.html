@@ -32,6 +32,7 @@
       <button id="btnFristen">Fristen</button>
       <button id="btnKunden">Kunden</button>
       <button id="btnLog">Verlauf</button>
+      <button id="btnDsgvo" title="Löschfristen und Auskunft">DSGVO</button>
       <button id="btnExportCsv">Export CSV</button>
       <button id="btnBearbeiter" title="Name für den Änderungsverlauf ändern"></button>
       <button id="btnLogout">Abmelden</button>
@@ -117,6 +118,7 @@
     </div>
     <div class="dlg-foot">
       <button type="button" class="danger" id="btnDelete" hidden>Löschen</button>
+      <button type="button" id="btnAuskunft" hidden title="Alle gespeicherten Daten dieser Person als Datei">Auskunft (DSGVO)</button>
       <div style="margin-left:auto;display:flex;gap:10px">
         <button type="button" id="btnCancel">Abbrechen</button>
         <button type="submit" class="primary">Speichern</button>
@@ -141,6 +143,27 @@
   </div>
   <div class="dlg-foot">
     <div style="margin-left:auto"><button type="button" id="btnKundenClose">Schließen</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgDsgvo">
+  <div class="dlg-head">DSGVO: Löschfristen und Auskunft</div>
+  <div class="dlg-body log">
+    <div class="logmeta" style="margin-bottom:10px">
+      Personenbezogene Daten dürfen nur so lange gespeichert werden, wie sie gebraucht werden.
+      Hier siehst du Einträge, die seit der gewählten Frist nicht mehr bearbeitet wurden.
+    </div>
+    <label style="display:block;margin-bottom:12px">Aufbewahrungsfrist
+      <select id="dsgvoFrist">
+        <option value="12">12 Monate</option>
+        <option value="24" selected>24 Monate</option>
+        <option value="36">36 Monate</option>
+      </select>
+    </label>
+    <div id="dsgvoBody"></div>
+  </div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnDsgvoClose">Schließen</button></div>
   </div>
 </dialog>
 

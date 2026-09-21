@@ -324,6 +324,52 @@ async function openLog(employeeId) {
 $("btnLog").onclick = () => openLog(null);
 $("btnLogClose").onclick = () => $("dlgLog").close();
 
+// ---------- DSGVO ----------
+const monateSeit = (iso) => (Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+
+function renderDsgvo() {
+  const frist = Number($("dsgvoFrist").value);
+  const alt = daten
+    .filter((m) => monateSeit(m.updatedAt || m.createdAt) >= frist)
+    .sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)));
+  $("dsgvoBody").innerHTML = alt.length
+    ? alt
+        .map(
+          (m) => `<div class="logitem">
+            <b>${esc(m.name)}</b> <span class="tag">${esc(katOf(m.kategorie).label)}</span>
+            <div class="logmeta">Zuletzt bearbeitet: ${zeitpunkt(m.updatedAt || m.createdAt)} · seit ${Math.floor(monateSeit(m.updatedAt || m.createdAt))} Monaten unverändert</div>
+            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+              <a href="/api/employees/${m.id}/auskunft" download>Auskunft herunterladen</a>
+              <button type="button" class="danger" data-del="${m.id}">Löschen</button>
+            </div>
+          </div>`
+        )
+        .join("")
+    : `<div class="empty">Kein Eintrag älter als ${frist} Monate.</div>`;
+  $("dsgvoBody")
+    .querySelectorAll("[data-del]")
+    .forEach(
+      (b) =>
+        (b.onclick = async () => {
+          const m = daten.find((x) => x.id === b.dataset.del);
+          if (!confirm(`"${m?.name}" endgültig löschen? Dokumente und Verlaufseinträge des Datensatzes gehen mit verloren.`)) return;
+          await api(`/api/employees/${b.dataset.del}`, { method: "DELETE" });
+          await reload();
+          renderDsgvo();
+        })
+    );
+}
+
+$("btnDsgvo").onclick = () => {
+  renderDsgvo();
+  $("dlgDsgvo").showModal();
+};
+$("dsgvoFrist").onchange = renderDsgvo;
+$("btnDsgvoClose").onclick = () => $("dlgDsgvo").close();
+$("btnAuskunft").onclick = () => {
+  if (editId) window.location.assign(`/api/employees/${editId}/auskunft`);
+};
+
 // ---------- Dokumente ----------
 const dateigroesse = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
@@ -385,6 +431,7 @@ function openDialog(id) {
   const m = daten.find((x) => x.id === id);
   $("dlgTitle").textContent = m ? "Mitarbeiter bearbeiten" : "Mitarbeiter anlegen";
   $("btnDelete").hidden = !m;
+  $("btnAuskunft").hidden = !m;
   if (m) {
     for (const el of form.elements) {
       if (!el.name) continue;
