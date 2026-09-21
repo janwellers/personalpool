@@ -47,6 +47,9 @@ label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute
 .stat b{color:var(--text)}
 .einsatz{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr)) auto;gap:8px;margin-bottom:8px;align-items:center}
 .einsatz button{padding:8px 10px}
+.doku{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
+.doku a{color:var(--accent)}
+.doku button{margin-left:auto;padding:4px 9px}
 .dlg-body.log{display:block}
 .logitem{border-bottom:1px solid var(--line);padding:10px 0}
 .logitem:last-child{border-bottom:0}

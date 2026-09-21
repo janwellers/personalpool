@@ -324,6 +324,56 @@ async function openLog(employeeId) {
 $("btnLog").onclick = () => openLog(null);
 $("btnLogClose").onclick = () => $("dlgLog").close();
 
+// ---------- Dokumente ----------
+const dateigroesse = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+
+async function renderDokumente(employeeId) {
+  const { documents } = await api(`/api/employees/${employeeId}/documents`);
+  $("dokuListe").innerHTML = documents.length
+    ? documents
+        .map(
+          (d) => `<div class="doku">
+            <a href="/api/documents/${d.id}" download>${esc(d.dateiname)}</a>
+            <span class="logmeta">${dateigroesse(d.groesse)} · ${esc(d.hochgeladenVon)} · ${zeitpunkt(d.createdAt)}</span>
+            <button type="button" data-doc="${d.id}" title="Dokument löschen">✕</button>
+          </div>`
+        )
+        .join("")
+    : `<div class="logmeta" style="margin-bottom:8px">Noch keine Dokumente.</div>`;
+  $("dokuListe")
+    .querySelectorAll("[data-doc]")
+    .forEach(
+      (b) =>
+        (b.onclick = async () => {
+          if (!confirm("Dokument wirklich löschen?")) return;
+          await api(`/api/documents/${b.dataset.doc}`, { method: "DELETE" });
+          await renderDokumente(employeeId);
+        })
+    );
+}
+
+$("dokuDatei").addEventListener("change", async (ev) => {
+  const datei = ev.target.files?.[0];
+  if (!datei || !editId) return;
+  $("formError").textContent = "";
+  try {
+    const inhalt = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1]);
+      reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
+      reader.readAsDataURL(datei);
+    });
+    await api(`/api/employees/${editId}/documents`, {
+      method: "POST",
+      body: { dateiname: datei.name, mime: datei.type, inhalt },
+    });
+    await renderDokumente(editId);
+  } catch (err) {
+    $("formError").textContent = err.message;
+  }
+  ev.target.value = "";
+});
+
 // ---------- Dialog ----------
 const form = $("form");
 
@@ -342,7 +392,10 @@ function openDialog(id) {
       else el.value = m[el.name] ?? "";
     }
     (m.einsaetze || []).forEach(addEinsatzRow);
+    $("dokuListe").innerHTML = "Lädt …";
+    renderDokumente(m.id).catch((err) => ($("dokuListe").textContent = err.message));
   }
+  $("dokuBereich").hidden = !m;
   if (!$("einsaetze").children.length) addEinsatzRow();
   $("dlg").showModal();
 }

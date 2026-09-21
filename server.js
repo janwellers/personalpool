@@ -9,6 +9,10 @@ import {
   deleteEmployee,
   listEvents,
   findDuplicates,
+  listDocuments,
+  addDocument,
+  getDocument,
+  deleteDocument,
   storageBackend,
   KATEGORIEN,
 } from "./store.js";
@@ -26,7 +30,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "1mb" }));
+const MAX_DOC_BYTES = 8 * 1024 * 1024;
+
+app.use(express.json({ limit: "12mb" }));
 app.use(express.static(join(__dirname, "public")));
 
 app.get("/api/health", (req, res) => {
@@ -100,6 +106,57 @@ app.put("/api/employees/:id", requireAuth, async (req, res, next) => {
 app.delete("/api/employees/:id", requireAuth, async (req, res, next) => {
   try {
     const removed = await deleteEmployee(req.params.id, akteurOf(req));
+    if (!removed) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/employees/:id/documents", requireAuth, async (req, res, next) => {
+  try {
+    res.json({ ok: true, documents: await listDocuments(req.params.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/api/employees/:id/documents", requireAuth, async (req, res, next) => {
+  try {
+    const dateiname = String(req.body?.dateiname || "").trim().slice(0, 200);
+    const base64 = String(req.body?.inhalt || "");
+    if (!dateiname || !base64) return res.status(400).json({ ok: false, error: "Datei fehlt." });
+    const buffer = Buffer.from(base64, "base64");
+    if (!buffer.length) return res.status(400).json({ ok: false, error: "Datei ist leer." });
+    if (buffer.length > MAX_DOC_BYTES) return res.status(413).json({ ok: false, error: "Datei ist zu groß (max. 8 MB)." });
+    const document = await addDocument({
+      employeeId: req.params.id,
+      dateiname,
+      mime: String(req.body?.mime || "application/octet-stream").slice(0, 100),
+      buffer,
+      akteur: akteurOf(req),
+    });
+    res.status(201).json({ ok: true, document });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/documents/:id", requireAuth, async (req, res, next) => {
+  try {
+    const doc = await getDocument(req.params.id);
+    if (!doc) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
+    res.setHeader("Content-Type", doc.mime);
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(doc.dateiname)}`);
+    res.send(doc.buffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete("/api/documents/:id", requireAuth, async (req, res, next) => {
+  try {
+    const removed = await deleteDocument(req.params.id, akteurOf(req));
     if (!removed) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
     res.json({ ok: true });
   } catch (err) {

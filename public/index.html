@@ -103,6 +103,12 @@
       <label>Staplerschein gültig bis<input name="staplerscheinBis" type="date" /></label>
       <label>Aktueller Einsatz endet am<input name="einsatzEnde" type="date" /></label>
 
+      <div class="full" id="dokuBereich" hidden>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dokumente (Staplerschein, Ausweis, Lebenslauf … max. 8 MB)</div>
+        <div id="dokuListe"></div>
+        <input type="file" id="dokuDatei" />
+      </div>
+
       <label class="full">Interne Notiz (Grund für die Kategorie)
         <textarea name="notiz" rows="2" placeholder="z. B. zuverlässig, aber nur Frühschicht"></textarea>
       </label>

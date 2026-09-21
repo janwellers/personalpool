@@ -1,6 +1,6 @@
 // Persistenzschicht für Mitarbeiter.
 // Nutzt Postgres, wenn DATABASE_URL gesetzt ist – sonst eine lokale JSON-Datei (Dev).
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -9,6 +9,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, "data");
 const FILE = join(DATA_DIR, "employees.json");
 const EVENT_FILE = join(DATA_DIR, "events.json");
+const DOC_FILE = join(DATA_DIR, "documents.json");
+const DOC_DIR = join(DATA_DIR, "docs");
 
 const usePg = Boolean(process.env.DATABASE_URL);
 export const storageBackend = usePg ? "postgres" : "file";
@@ -90,6 +92,109 @@ function mapRow(r) {
     createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
     updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at,
   };
+}
+
+async function readDocs() {
+  try {
+    const parsed = JSON.parse(await readFile(DOC_FILE, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeDocs(list) {
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(DOC_FILE, JSON.stringify(list, null, 2));
+}
+
+const docMeta = (d) => ({
+  id: d.id,
+  employeeId: d.employeeId ?? d.employee_id,
+  dateiname: d.dateiname,
+  mime: d.mime,
+  groesse: Number(d.groesse),
+  hochgeladenVon: d.hochgeladenVon ?? d.hochgeladen_von,
+  createdAt: d.createdAt ?? (d.created_at instanceof Date ? d.created_at.toISOString() : d.created_at),
+});
+
+export async function listDocuments(employeeId) {
+  if (usePg) {
+    const { rows } = await pool.query(
+      "SELECT id, employee_id, dateiname, mime, groesse, hochgeladen_von, created_at FROM employee_documents WHERE employee_id = $1 ORDER BY created_at DESC",
+      [employeeId]
+    );
+    return rows.map(docMeta);
+  }
+  return (await readDocs())
+    .filter((d) => d.employeeId === employeeId)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .map(docMeta);
+}
+
+export async function addDocument({ employeeId, dateiname, mime, buffer, akteur }) {
+  const id = randomUUID();
+  const meta = {
+    id,
+    employeeId,
+    dateiname,
+    mime,
+    groesse: buffer.length,
+    hochgeladenVon: String(akteur || "").trim() || "unbekannt",
+    createdAt: new Date().toISOString(),
+  };
+  if (usePg) {
+    await pool.query(
+      `INSERT INTO employee_documents (id, employee_id, dateiname, mime, groesse, daten, hochgeladen_von, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [id, employeeId, dateiname, mime, buffer.length, buffer, meta.hochgeladenVon, meta.createdAt]
+    );
+  } else {
+    await mkdir(DOC_DIR, { recursive: true });
+    await writeFile(join(DOC_DIR, id), buffer);
+    const list = await readDocs();
+    list.push(meta);
+    await writeDocs(list);
+  }
+  const employee = await getEmployee(employeeId);
+  await logEvent({
+    employeeId,
+    employeeName: employee?.name || "",
+    aktion: "Dokument hinzugefügt",
+    akteur,
+    aenderungen: [{ feld: "dokument", vorher: "", nachher: dateiname }],
+  });
+  return meta;
+}
+
+export async function getDocument(id) {
+  if (usePg) {
+    const { rows } = await pool.query("SELECT * FROM employee_documents WHERE id = $1", [id]);
+    return rows[0] ? { ...docMeta(rows[0]), buffer: rows[0].daten } : null;
+  }
+  const meta = (await readDocs()).find((d) => d.id === id);
+  if (!meta) return null;
+  return { ...docMeta(meta), buffer: await readFile(join(DOC_DIR, id)) };
+}
+
+export async function deleteDocument(id, akteur) {
+  const doc = await getDocument(id).catch(() => null);
+  if (!doc) return false;
+  if (usePg) {
+    await pool.query("DELETE FROM employee_documents WHERE id = $1", [id]);
+  } else {
+    await writeDocs((await readDocs()).filter((d) => d.id !== id));
+    await rm(join(DOC_DIR, id), { force: true });
+  }
+  const employee = await getEmployee(doc.employeeId);
+  await logEvent({
+    employeeId: doc.employeeId,
+    employeeName: employee?.name || "",
+    aktion: "Dokument gelöscht",
+    akteur,
+    aenderungen: [{ feld: "dokument", vorher: doc.dateiname, nachher: "" }],
+  });
+  return true;
 }
 
 const leereDaten = (e) => Object.fromEntries(DATE_FIELDS.map((f) => [f, e[f] || ""]));
@@ -227,6 +332,19 @@ export async function initStore() {
   `);
   await pool.query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS staplerschein_bis DATE");
   await pool.query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS einsatz_ende DATE");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS employee_documents (
+      id TEXT PRIMARY KEY,
+      employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+      dateiname TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      groesse INTEGER NOT NULL,
+      daten BYTEA NOT NULL,
+      hochgeladen_von TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS employee_documents_employee_idx ON employee_documents (employee_id)");
   await pool.query("CREATE INDEX IF NOT EXISTS employee_events_employee_idx ON employee_events (employee_id, created_at DESC)");
 }
 
@@ -339,6 +457,9 @@ export async function deleteEmployee(id, akteur) {
   const next = list.filter((m) => m.id !== id);
   if (next.length === list.length) return false;
   await writeAll(next);
+  const docs = await readDocs();
+  for (const d of docs.filter((d) => d.employeeId === id)) await rm(join(DOC_DIR, d.id), { force: true });
+  await writeDocs(docs.filter((d) => d.employeeId !== id));
   await logEvent({ employeeId: id, employeeName: vorher?.name || "(gelöscht)", aktion: "gelöscht", akteur });
   return true;
 }
