@@ -14,6 +14,7 @@
     <div class="hint">Mitarbeiter-Kategorisierung für die Personaldienstleistung</div>
     <form id="loginForm">
       <input type="password" name="password" placeholder="Passwort" autocomplete="current-password" required />
+      <input name="bearbeiter" id="loginBearbeiter" placeholder="Dein Name (für den Änderungsverlauf)" autocomplete="name" />
       <div class="error" id="loginError"></div>
       <button class="primary" type="submit">Anmelden</button>
     </form>
@@ -28,7 +29,9 @@
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="primary" id="btnNew">+ Mitarbeiter</button>
+      <button id="btnLog">Verlauf</button>
       <button id="btnExportCsv">Export CSV</button>
+      <button id="btnBearbeiter" title="Name für den Änderungsverlauf ändern"></button>
       <button id="btnLogout">Abmelden</button>
     </div>
   </header>
@@ -109,6 +112,14 @@
       </div>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlgLog">
+  <div class="dlg-head" id="logTitle">Änderungsverlauf</div>
+  <div class="dlg-body log" id="logBody"></div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnLogClose">Schließen</button></div>
+  </div>
 </dialog>
 
 <script src="app.js"></script>

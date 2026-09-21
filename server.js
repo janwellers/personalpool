@@ -7,6 +7,7 @@ import {
   createEmployee,
   updateEmployee,
   deleteEmployee,
+  listEvents,
   storageBackend,
   KATEGORIEN,
 } from "./store.js";
@@ -49,6 +50,8 @@ app.post("/api/logout", (req, res) => {
   res.json({ ok: true });
 });
 
+const akteurOf = (req) => String(req.get("X-Bearbeiter") || "").trim().slice(0, 60);
+
 app.get("/api/kategorien", (req, res) => res.json({ ok: true, kategorien: KATEGORIEN }));
 
 app.get("/api/employees", requireAuth, async (req, res, next) => {
@@ -64,7 +67,7 @@ app.post("/api/employees", requireAuth, async (req, res, next) => {
     if (!String(req.body?.name || "").trim()) {
       return res.status(400).json({ ok: false, error: "Name fehlt." });
     }
-    res.status(201).json({ ok: true, employee: await createEmployee(req.body) });
+    res.status(201).json({ ok: true, employee: await createEmployee(req.body, akteurOf(req)) });
   } catch (err) {
     next(err);
   }
@@ -75,7 +78,7 @@ app.put("/api/employees/:id", requireAuth, async (req, res, next) => {
     if (!String(req.body?.name || "").trim()) {
       return res.status(400).json({ ok: false, error: "Name fehlt." });
     }
-    const employee = await updateEmployee(req.params.id, req.body);
+    const employee = await updateEmployee(req.params.id, req.body, akteurOf(req));
     if (!employee) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
     res.json({ ok: true, employee });
   } catch (err) {
@@ -85,9 +88,19 @@ app.put("/api/employees/:id", requireAuth, async (req, res, next) => {
 
 app.delete("/api/employees/:id", requireAuth, async (req, res, next) => {
   try {
-    const removed = await deleteEmployee(req.params.id);
+    const removed = await deleteEmployee(req.params.id, akteurOf(req));
     if (!removed) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/events", requireAuth, async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 200, 500);
+    const events = await listEvents({ employeeId: req.query.employeeId || null, limit });
+    res.json({ ok: true, events });
   } catch (err) {
     next(err);
   }

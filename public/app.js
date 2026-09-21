@@ -7,6 +7,24 @@ const FARBEN = {
 };
 const MOBILITAET = ["eigener PKW", "Führerschein, kein PKW", "ÖPNV", "Fahrrad / fußläufig", "keine Mobilität"];
 
+const FELD_LABEL = {
+  name: "Name",
+  kategorie: "Kategorie",
+  bewertung: "Bewertung",
+  sprachen: "Sprache(n)",
+  nationalitaet: "Nationalität",
+  wohnort: "Wohnort",
+  mobilitaet: "Mobilität",
+  staplerschein: "Staplerschein",
+  schichtbereit: "Schichtbereit",
+  wiedereinstellbar: "Wiedereinstellbar",
+  vorerfahrung: "Vorerfahrung",
+  kontakt: "Kontakt",
+  verfuegbar: "Verfügbar ab",
+  notiz: "Notiz",
+  einsaetze: "Einsätze",
+};
+
 let kategorien = [];
 let daten = [];
 let filterKat = "alle";
@@ -16,9 +34,12 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const katOf = (id) => kategorien.find((k) => k.id === id) || kategorien[0] || { id, label: id };
 
+const getBearbeiter = () => localStorage.getItem("personalpool.bearbeiter") || "";
+const setBearbeiter = (name) => localStorage.setItem("personalpool.bearbeiter", String(name || "").trim().slice(0, 60));
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Bearbeiter": getBearbeiter() },
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -32,6 +53,7 @@ $("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("loginError").textContent = "";
   try {
+    setBearbeiter(e.target.bearbeiter.value);
     await api("/api/login", { method: "POST", body: { password: e.target.password.value } });
     await start();
   } catch (err) {
@@ -151,13 +173,55 @@ function render() {
         ${m.vorerfahrung ? `<div style="margin-top:8px;font-size:13px"><b>Kann:</b> ${esc(m.vorerfahrung)}</div>` : ""}
         ${einsaetze.length ? `<div style="margin-top:8px;font-size:13px"><b>Einsätze:</b><ul style="margin:6px 0 0 18px;padding:0">${einsaetze.join("")}</ul></div>` : ""}
         ${m.notiz ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">Notiz: ${esc(m.notiz)}</div>` : ""}
-        <div class="actions"><button data-edit="${m.id}">Bearbeiten</button></div>
+        <div class="actions"><button data-edit="${m.id}">Bearbeiten</button><button data-log="${m.id}">Verlauf</button></div>
       </div>`;
     })
     .join("");
 
   $("grid").querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => openDialog(b.dataset.edit)));
+  $("grid").querySelectorAll("[data-log]").forEach((b) => (b.onclick = () => openLog(b.dataset.log)));
 }
+
+// ---------- Änderungsverlauf ----------
+const zeitpunkt = (iso) => new Date(iso).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+
+function aenderungText(a) {
+  const label = FELD_LABEL[a.feld] || a.feld;
+  const wert = (v) => {
+    if (v === "") return "–";
+    if (v === "true") return "ja";
+    if (v === "false") return "nein";
+    return a.feld === "kategorie" ? katOf(v).label : v;
+  };
+  return `<li><b>${esc(label)}:</b> ${esc(wert(a.vorher))} → ${esc(wert(a.nachher))}</li>`;
+}
+
+async function openLog(employeeId) {
+  const m = daten.find((x) => x.id === employeeId);
+  $("logTitle").textContent = m ? `Änderungsverlauf – ${m.name}` : "Änderungsverlauf (alle)";
+  $("logBody").innerHTML = "Lädt …";
+  $("dlgLog").showModal();
+  try {
+    const { events } = await api(`/api/events${employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : ""}`);
+    $("logBody").innerHTML = events.length
+      ? events
+          .map(
+            (ev) => `<div class="logitem">
+              <div class="logmeta">${zeitpunkt(ev.createdAt)} · <b>${esc(ev.akteur)}</b> · ${esc(ev.aktion)}${
+                employeeId ? "" : ` · ${esc(ev.employeeName)}`
+              }</div>
+              ${ev.aenderungen?.length ? `<ul>${ev.aenderungen.map(aenderungText).join("")}</ul>` : ""}
+            </div>`
+          )
+          .join("")
+      : "<div class='empty'>Noch keine Änderungen aufgezeichnet.</div>";
+  } catch (err) {
+    $("logBody").textContent = err.message;
+  }
+}
+
+$("btnLog").onclick = () => openLog(null);
+$("btnLogClose").onclick = () => $("dlgLog").close();
 
 // ---------- Dialog ----------
 const form = $("form");
@@ -196,6 +260,17 @@ form.addEventListener("submit", async (e) => {
     $("formError").textContent = err.message;
   }
 });
+
+function renderBearbeiter() {
+  $("btnBearbeiter").textContent = getBearbeiter() ? `👤 ${getBearbeiter()}` : "👤 Name setzen";
+}
+
+$("btnBearbeiter").onclick = () => {
+  const name = prompt("Dein Name (erscheint im Änderungsverlauf):", getBearbeiter());
+  if (name === null) return;
+  setBearbeiter(name);
+  renderBearbeiter();
+};
 
 $("btnCancel").onclick = () => $("dlg").close();
 $("btnNew").onclick = () => openDialog(null);
@@ -241,11 +316,13 @@ async function start() {
   if (!session.authed) {
     $("loginView").hidden = false;
     $("appView").hidden = true;
+    $("loginBearbeiter").value = getBearbeiter();
     if (session.usesDevDefault) $("loginError").textContent = 'Entwicklungsmodus – Passwort: "demo"';
     return;
   }
   $("loginView").hidden = true;
   $("appView").hidden = false;
+  renderBearbeiter();
   kategorien = (await api("/api/kategorien")).kategorien;
   fillSelects();
   await reload();
