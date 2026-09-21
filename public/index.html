@@ -29,6 +29,7 @@
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="primary" id="btnNew">+ Mitarbeiter</button>
+      <button id="btnFristen">Fristen</button>
       <button id="btnKunden">Kunden</button>
       <button id="btnLog">Verlauf</button>
       <button id="btnExportCsv">Export CSV</button>
@@ -42,7 +43,7 @@
     <div class="cats" id="cats"></div>
 
     <div class="toolbar">
-      <input id="q" placeholder="Suche: Name, Sprache, Ort, Firma, Erfahrung …" style="flex:1;min-width:240px" />
+      <input id="q" class="grow" placeholder="Suche: Name, Sprache, Ort, Firma, Erfahrung …" />
       <select id="fStapler">
         <option value="">Staplerschein: egal</option>
         <option value="ja">mit Staplerschein</option>
@@ -99,6 +100,9 @@
       <label>Kontakt<input name="kontakt" placeholder="Telefon / E-Mail" /></label>
       <label>Verfügbar ab<input name="verfuegbar" type="date" /></label>
 
+      <label>Staplerschein gültig bis<input name="staplerscheinBis" type="date" /></label>
+      <label>Aktueller Einsatz endet am<input name="einsatzEnde" type="date" /></label>
+
       <label class="full">Interne Notiz (Grund für die Kategorie)
         <textarea name="notiz" rows="2" placeholder="z. B. zuverlässig, aber nur Frühschicht"></textarea>
       </label>
@@ -113,6 +117,14 @@
       </div>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlgFristen">
+  <div class="dlg-head">Fristen und Erinnerungen</div>
+  <div class="dlg-body log" id="fristenBody"></div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnFristenClose">Schließen</button></div>
+  </div>
 </dialog>
 
 <dialog id="dlgKunden">

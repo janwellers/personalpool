@@ -21,6 +21,8 @@ const FELD_LABEL = {
   vorerfahrung: "Vorerfahrung",
   kontakt: "Kontakt",
   verfuegbar: "Verfügbar ab",
+  staplerscheinBis: "Staplerschein gültig bis",
+  einsatzEnde: "Einsatzende",
   notiz: "Notiz",
   einsaetze: "Einsätze",
 };
@@ -118,7 +120,8 @@ function renderStats() {
   $("stats").innerHTML = `
     <div class="stat">Gesamt: <b>${daten.length}</b></div>
     <div class="stat">Mit Staplerschein: <b>${daten.filter((m) => m.staplerschein).length}</b></div>
-    <div class="stat">Wiedereinstellbar: <b>${daten.filter((m) => m.wiedereinstellbar).length}</b></div>`;
+    <div class="stat">Wiedereinstellbar: <b>${daten.filter((m) => m.wiedereinstellbar).length}</b></div>
+    <div class="stat">Offene Fristen: <b>${fristen().length}</b></div>`;
 }
 
 function passt(m) {
@@ -160,6 +163,12 @@ function render() {
         m.schichtbereit && "Schichtbereit",
         m.wiedereinstellbar && "Wiedereinstellbar",
       ].filter(Boolean);
+      const warnungen = [
+        m.staplerscheinBis && tageBis(m.staplerscheinBis) <= WARNTAGE
+          ? `Staplerschein ${fristText(tageBis(m.staplerscheinBis))}`
+          : "",
+        m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE ? `Einsatzende ${fristText(tageBis(m.einsatzEnde))}` : "",
+      ].filter(Boolean);
       const einsaetze = (m.einsaetze || []).map(
         (e) => `<li>${esc([e.unternehmen, e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" | "))}</li>`
       );
@@ -171,10 +180,11 @@ function render() {
           ${zeile("Nationalität", m.nationalitaet)}
           ${zeile("Wohnort", m.wohnort)}
           ${zeile("Mobilität", m.mobilitaet)}
-          ${zeile("Verfügbar ab", m.verfuegbar)}
+          ${zeile("Verfügbar ab", m.verfuegbar ? dtFormat(m.verfuegbar) : "")}
           ${zeile("Kontakt", m.kontakt)}
         </div>
         ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>` : ""}
+        ${warnungen.length ? `<div class="tags">${warnungen.map((t) => `<span class="tag warn">⚠ ${esc(t)}</span>`).join("")}</div>` : ""}
         ${m.vorerfahrung ? `<div style="margin-top:8px;font-size:13px"><b>Kann:</b> ${esc(m.vorerfahrung)}</div>` : ""}
         ${einsaetze.length ? `<div style="margin-top:8px;font-size:13px"><b>Einsätze:</b><ul style="margin:6px 0 0 18px;padding:0">${einsaetze.join("")}</ul></div>` : ""}
         ${m.notiz ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">Notiz: ${esc(m.notiz)}</div>` : ""}
@@ -186,6 +196,44 @@ function render() {
   $("grid").querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => openDialog(b.dataset.edit)));
   $("grid").querySelectorAll("[data-log]").forEach((b) => (b.onclick = () => openLog(b.dataset.log)));
 }
+
+// ---------- Fristen ----------
+const WARNTAGE = 30;
+const heute = () => new Date(new Date().toDateString());
+const tageBis = (datum) => Math.round((new Date(datum) - heute()) / 86400000);
+const dtFormat = (datum) => new Date(datum).toLocaleDateString("de-DE");
+
+function fristen() {
+  const items = [];
+  for (const m of daten) {
+    if (m.staplerscheinBis) items.push({ m, art: "Staplerschein läuft ab", datum: m.staplerscheinBis, tage: tageBis(m.staplerscheinBis) });
+    if (m.einsatzEnde) items.push({ m, art: "Einsatz endet", datum: m.einsatzEnde, tage: tageBis(m.einsatzEnde) });
+  }
+  return items.filter((i) => i.tage <= WARNTAGE).sort((a, b) => a.tage - b.tage);
+}
+
+const fristText = (tage) =>
+  tage < 0 ? `seit ${Math.abs(tage)} Tag(en) überfällig` : tage === 0 ? "heute" : `in ${tage} Tag(en)`;
+
+function renderFristen() {
+  const liste = fristen();
+  $("fristenBody").innerHTML = liste.length
+    ? liste
+        .map(
+          (i) => `<div class="logitem">
+            <div><b>${esc(i.m.name)}</b> – ${esc(i.art)} <span class="tag ${i.tage < 0 ? "warn" : ""}">${esc(fristText(i.tage))}</span></div>
+            <div class="logmeta">${esc(dtFormat(i.datum))}${i.m.kontakt ? ` · ${esc(i.m.kontakt)}` : ""}</div>
+          </div>`
+        )
+        .join("")
+    : `<div class='empty'>Keine Fristen in den nächsten ${WARNTAGE} Tagen.</div>`;
+}
+
+$("btnFristen").onclick = () => {
+  renderFristen();
+  $("dlgFristen").showModal();
+};
+$("btnFristenClose").onclick = () => $("dlgFristen").close();
 
 // ---------- Kundenansicht ----------
 function kundenListe() {
@@ -357,7 +405,8 @@ $("btnDelete").onclick = async () => {
 // ---------- CSV-Export ----------
 $("btnExportCsv").onclick = () => {
   const cols = ["name", "kategorie", "bewertung", "sprachen", "nationalitaet", "wohnort", "mobilitaet",
-    "staplerschein", "schichtbereit", "wiedereinstellbar", "vorerfahrung", "einsaetze", "kontakt", "verfuegbar", "notiz"];
+    "staplerschein", "schichtbereit", "wiedereinstellbar", "vorerfahrung", "einsaetze", "kontakt", "verfuegbar",
+    "staplerscheinBis", "einsatzEnde", "notiz"];
   const wert = (m, c) => {
     if (c === "kategorie") return katOf(m.kategorie).label;
     if (c === "einsaetze") return (m.einsaetze || []).map((e) => [e.unternehmen, e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" | ")).join(" ; ");

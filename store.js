@@ -37,8 +37,12 @@ const FIELDS = [
   "vorerfahrung",
   "kontakt",
   "verfuegbar",
+  "staplerscheinBis",
+  "einsatzEnde",
   "notiz",
 ];
+
+const DATE_FIELDS = ["verfuegbar", "staplerscheinBis", "einsatzEnde"];
 
 function normalize(input) {
   const out = {};
@@ -46,7 +50,7 @@ function normalize(input) {
   out.name = String(out.name).trim();
   out.kategorie = KATEGORIEN.some((k) => k.id === out.kategorie) ? out.kategorie : "nochmal";
   out.bewertung = /^[1-5]$/.test(String(out.bewertung)) ? Number(out.bewertung) : null;
-  out.verfuegbar = out.verfuegbar || null;
+  for (const f of DATE_FIELDS) out[f] = out[f] || null;
   for (const f of ["staplerschein", "schichtbereit", "wiedereinstellbar"]) out[f] = Boolean(input[f]);
   out.einsaetze = Array.isArray(input.einsaetze)
     ? input.einsaetze
@@ -60,6 +64,8 @@ function normalize(input) {
     : [];
   return out;
 }
+
+const asDate = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v || "");
 
 function mapRow(r) {
   return {
@@ -77,12 +83,16 @@ function mapRow(r) {
     vorerfahrung: r.vorerfahrung || "",
     einsaetze: Array.isArray(r.einsaetze) ? r.einsaetze : [],
     kontakt: r.kontakt || "",
-    verfuegbar: r.verfuegbar instanceof Date ? r.verfuegbar.toISOString().slice(0, 10) : r.verfuegbar || "",
+    verfuegbar: asDate(r.verfuegbar),
+    staplerscheinBis: asDate(r.staplerschein_bis),
+    einsatzEnde: asDate(r.einsatz_ende),
     notiz: r.notiz || "",
     createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
     updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at,
   };
 }
+
+const leereDaten = (e) => Object.fromEntries(DATE_FIELDS.map((f) => [f, e[f] || ""]));
 
 async function readAll() {
   try {
@@ -215,6 +225,8 @@ export async function initStore() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  await pool.query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS staplerschein_bis DATE");
+  await pool.query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS einsatz_ende DATE");
   await pool.query("CREATE INDEX IF NOT EXISTS employee_events_employee_idx ON employee_events (employee_id, created_at DESC)");
 }
 
@@ -268,16 +280,16 @@ export async function createEmployee(input, akteur) {
     const { rows } = await pool.query(
       `INSERT INTO employees (id, name, kategorie, bewertung, sprachen, nationalitaet, wohnort,
          mobilitaet, staplerschein, schichtbereit, wiedereinstellbar, vorerfahrung, einsaetze,
-         kontakt, verfuegbar, notiz)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+         kontakt, verfuegbar, staplerschein_bis, einsatz_ende, notiz)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [id, e.name, e.kategorie, e.bewertung, e.sprachen, e.nationalitaet, e.wohnort, e.mobilitaet,
        e.staplerschein, e.schichtbereit, e.wiedereinstellbar, e.vorerfahrung,
-       JSON.stringify(e.einsaetze), e.kontakt, e.verfuegbar, e.notiz]
+       JSON.stringify(e.einsaetze), e.kontakt, e.verfuegbar, e.staplerscheinBis, e.einsatzEnde, e.notiz]
     );
     return angelegt(mapRow(rows[0]));
   }
   const now = new Date().toISOString();
-  const record = { id, ...e, verfuegbar: e.verfuegbar || "", createdAt: now, updatedAt: now };
+  const record = { id, ...e, ...leereDaten(e), createdAt: now, updatedAt: now };
   const list = await readAll();
   list.push(record);
   await writeAll(list);
@@ -298,18 +310,19 @@ export async function updateEmployee(id, input, akteur) {
     const { rows } = await pool.query(
       `UPDATE employees SET name=$2, kategorie=$3, bewertung=$4, sprachen=$5, nationalitaet=$6,
          wohnort=$7, mobilitaet=$8, staplerschein=$9, schichtbereit=$10, wiedereinstellbar=$11,
-         vorerfahrung=$12, einsaetze=$13, kontakt=$14, verfuegbar=$15, notiz=$16, updated_at=now()
+         vorerfahrung=$12, einsaetze=$13, kontakt=$14, verfuegbar=$15, staplerschein_bis=$16,
+         einsatz_ende=$17, notiz=$18, updated_at=now()
        WHERE id=$1 RETURNING *`,
       [id, e.name, e.kategorie, e.bewertung, e.sprachen, e.nationalitaet, e.wohnort, e.mobilitaet,
        e.staplerschein, e.schichtbereit, e.wiedereinstellbar, e.vorerfahrung,
-       JSON.stringify(e.einsaetze), e.kontakt, e.verfuegbar, e.notiz]
+       JSON.stringify(e.einsaetze), e.kontakt, e.verfuegbar, e.staplerscheinBis, e.einsatzEnde, e.notiz]
     );
     return rows[0] ? geaendert(mapRow(rows[0])) : null;
   }
   const list = await readAll();
   const idx = list.findIndex((m) => m.id === id);
   if (idx < 0) return null;
-  list[idx] = { ...list[idx], ...e, verfuegbar: e.verfuegbar || "", updatedAt: new Date().toISOString() };
+  list[idx] = { ...list[idx], ...e, ...leereDaten(e), updatedAt: new Date().toISOString() };
   await writeAll(list);
   return geaendert(list[idx]);
 }
