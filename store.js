@@ -3,7 +3,7 @@
 import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, "data");
@@ -11,6 +11,7 @@ const FILE = join(DATA_DIR, "employees.json");
 const EVENT_FILE = join(DATA_DIR, "events.json");
 const DOC_FILE = join(DATA_DIR, "documents.json");
 const DOC_DIR = join(DATA_DIR, "docs");
+const USER_FILE = join(DATA_DIR, "users.json");
 
 const usePg = Boolean(process.env.DATABASE_URL);
 export const storageBackend = usePg ? "postgres" : "file";
@@ -197,6 +198,119 @@ export async function deleteDocument(id, akteur) {
   return true;
 }
 
+// ---------- Benutzerkonten ----------
+const hashPasswort = (pw) => {
+  const salt = randomBytes(16).toString("hex");
+  return `${salt}:${scryptSync(pw, salt, 64).toString("hex")}`;
+};
+
+const passwortStimmt = (pw, gespeichert) => {
+  const [salt, hash] = String(gespeichert || "").split(":");
+  if (!salt || !hash) return false;
+  const a = Buffer.from(hash, "hex");
+  const b = scryptSync(pw, salt, 64);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
+const benutzerKey = (s) => String(s || "").trim().toLowerCase();
+
+const userPublic = (u) => ({
+  id: u.id,
+  benutzername: u.benutzername,
+  name: u.name,
+  rolle: u.rolle,
+  createdAt: u.createdAt ?? (u.created_at instanceof Date ? u.created_at.toISOString() : u.created_at),
+});
+
+async function readUsers() {
+  try {
+    const parsed = JSON.parse(await readFile(USER_FILE, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeUsers(list) {
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(USER_FILE, JSON.stringify(list, null, 2));
+}
+
+async function allUsers() {
+  if (usePg) return (await pool.query("SELECT * FROM app_users ORDER BY name")).rows;
+  return (await readUsers()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function listUsers() {
+  return (await allUsers()).map(userPublic);
+}
+
+export async function countUsers() {
+  return (await allUsers()).length;
+}
+
+export async function createUser({ benutzername, name, rolle, passwort }) {
+  const login = benutzerKey(benutzername);
+  if (!login || !passwort) throw Object.assign(new Error("Benutzername und Passwort sind nötig."), { status: 400 });
+  if (String(passwort).length < 8) throw Object.assign(new Error("Passwort braucht mindestens 8 Zeichen."), { status: 400 });
+  if ((await allUsers()).some((u) => benutzerKey(u.benutzername) === login)) {
+    throw Object.assign(new Error("Benutzername ist schon vergeben."), { status: 409 });
+  }
+  const user = {
+    id: randomUUID(),
+    benutzername: login,
+    name: String(name || "").trim() || login,
+    rolle: rolle === "admin" ? "admin" : "user",
+    passwort: hashPasswort(String(passwort)),
+    createdAt: new Date().toISOString(),
+  };
+  if (usePg) {
+    await pool.query(
+      "INSERT INTO app_users (id, benutzername, name, rolle, passwort, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
+      [user.id, user.benutzername, user.name, user.rolle, user.passwort, user.createdAt]
+    );
+  } else {
+    const list = await readUsers();
+    list.push(user);
+    await writeUsers(list);
+  }
+  return userPublic(user);
+}
+
+export async function setUserPassword(id, passwort) {
+  if (String(passwort || "").length < 8) throw Object.assign(new Error("Passwort braucht mindestens 8 Zeichen."), { status: 400 });
+  const hash = hashPasswort(String(passwort));
+  if (usePg) {
+    const { rowCount } = await pool.query("UPDATE app_users SET passwort = $2 WHERE id = $1", [id, hash]);
+    return Boolean(rowCount);
+  }
+  const list = await readUsers();
+  const u = list.find((x) => x.id === id);
+  if (!u) return false;
+  u.passwort = hash;
+  await writeUsers(list);
+  return true;
+}
+
+export async function deleteUser(id) {
+  if (usePg) {
+    const { rowCount } = await pool.query("DELETE FROM app_users WHERE id = $1", [id]);
+    return Boolean(rowCount);
+  }
+  const list = await readUsers();
+  const next = list.filter((u) => u.id !== id);
+  if (next.length === list.length) return false;
+  await writeUsers(next);
+  return true;
+}
+
+export async function authenticateUser(benutzername, passwort) {
+  const login = benutzerKey(benutzername);
+  const user = (await allUsers()).find((u) => benutzerKey(u.benutzername) === login);
+  if (!user || !passwortStimmt(String(passwort || ""), user.passwort)) return null;
+  return userPublic(user);
+}
+
 const leereDaten = (e) => Object.fromEntries(DATE_FIELDS.map((f) => [f, e[f] || ""]));
 
 async function readAll() {
@@ -341,6 +455,16 @@ export async function initStore() {
       groesse INTEGER NOT NULL,
       daten BYTEA NOT NULL,
       hochgeladen_von TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_users (
+      id TEXT PRIMARY KEY,
+      benutzername TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      rolle TEXT NOT NULL DEFAULT 'user',
+      passwort TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);

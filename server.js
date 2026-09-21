@@ -14,6 +14,12 @@ import {
   addDocument,
   getDocument,
   deleteDocument,
+  listUsers,
+  countUsers,
+  createUser,
+  setUserPassword,
+  deleteUser,
+  authenticateUser,
   storageBackend,
   KATEGORIEN,
 } from "./store.js";
@@ -21,10 +27,12 @@ import {
   checkPassword,
   setAuthCookie,
   clearAuthCookie,
-  isAuthed,
+  currentUser,
   requireAuth,
+  requireAdmin,
   loginEnabled,
   usesDevDefault,
+  TEAM_USER,
 } from "./auth.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,17 +48,85 @@ app.get("/api/health", (req, res) => {
   res.json({ ok: true, storage: storageBackend, loginEnabled });
 });
 
-app.get("/api/session", (req, res) => {
-  res.json({ ok: true, authed: isAuthed(req), loginEnabled, usesDevDefault });
+app.get("/api/session", async (req, res, next) => {
+  try {
+    const user = currentUser(req);
+    res.json({
+      ok: true,
+      authed: Boolean(user),
+      user,
+      benutzerkonten: (await countUsers()) > 0,
+      loginEnabled,
+      usesDevDefault,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.post("/api/login", (req, res) => {
-  if (!loginEnabled) return res.status(503).json({ ok: false, error: "Kein Passwort konfiguriert (APP_PASSWORD)." });
-  if (!checkPassword(req.body?.password || "")) {
-    return res.status(401).json({ ok: false, error: "Falsches Passwort." });
+// Persönlicher Login; das gemeinsame Passwort greift nur, solange es keine Benutzerkonten gibt.
+app.post("/api/login", async (req, res, next) => {
+  try {
+    const benutzer = String(req.body?.benutzer || "").trim();
+    const passwort = String(req.body?.password || "");
+    if (benutzer) {
+      const user = await authenticateUser(benutzer, passwort);
+      if (!user) return res.status(401).json({ ok: false, error: "Benutzername oder Passwort stimmt nicht." });
+      setAuthCookie(res, user);
+      return res.json({ ok: true, user });
+    }
+    if ((await countUsers()) > 0) {
+      return res.status(401).json({ ok: false, error: "Bitte mit deinem persönlichen Benutzernamen anmelden." });
+    }
+    if (!loginEnabled) return res.status(503).json({ ok: false, error: "Kein Passwort konfiguriert (APP_PASSWORD)." });
+    if (!checkPassword(passwort)) return res.status(401).json({ ok: false, error: "Falsches Passwort." });
+    setAuthCookie(res, TEAM_USER);
+    res.json({ ok: true, user: TEAM_USER });
+  } catch (err) {
+    next(err);
   }
-  setAuthCookie(res);
-  res.json({ ok: true });
+});
+
+app.get("/api/users", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    res.json({ ok: true, users: await listUsers() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/api/users", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    res.status(201).json({ ok: true, user: await createUser(req.body || {}) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.put("/api/users/:id/passwort", requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.rolle !== "admin" && req.user.id !== req.params.id) {
+      return res.status(403).json({ ok: false, error: "Nur das eigene Passwort ist änderbar." });
+    }
+    const ok = await setUserPassword(req.params.id, req.body?.passwort);
+    if (!ok) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete("/api/users/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (req.user.id === req.params.id) {
+      return res.status(400).json({ ok: false, error: "Das eigene Konto kann nicht gelöscht werden." });
+    }
+    const ok = await deleteUser(req.params.id);
+    if (!ok) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.post("/api/logout", (req, res) => {
@@ -58,7 +134,11 @@ app.post("/api/logout", (req, res) => {
   res.json({ ok: true });
 });
 
-const akteurOf = (req) => String(req.get("X-Bearbeiter") || "").trim().slice(0, 60);
+// Beim persönlichen Login kommt der Name aus der Sitzung, beim Team-Zugang aus dem Kopffeld.
+const akteurOf = (req) =>
+  req.user && !req.user.team
+    ? req.user.name
+    : String(req.get("X-Bearbeiter") || "").trim().slice(0, 60) || "Team-Zugang";
 
 app.get("/api/kategorien", (req, res) => res.json({ ok: true, kategorien: KATEGORIEN }));
 
@@ -198,6 +278,7 @@ app.get("/api/events", requireAuth, async (req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
+  if (err?.status) return res.status(err.status).json({ ok: false, error: err.message });
   console.error(err);
   res.status(500).json({ ok: false, error: "Serverfehler." });
 });

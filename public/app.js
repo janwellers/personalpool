@@ -31,6 +31,7 @@ let kategorien = [];
 let daten = [];
 let filterKat = "alle";
 let editId = null;
+let ich = null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -61,7 +62,10 @@ $("loginForm").addEventListener("submit", async (e) => {
   $("loginError").textContent = "";
   try {
     setBearbeiter(e.target.bearbeiter.value);
-    await api("/api/login", { method: "POST", body: { password: e.target.password.value } });
+    await api("/api/login", {
+      method: "POST",
+      body: { benutzer: e.target.benutzer.value, password: e.target.password.value },
+    });
     await start();
   } catch (err) {
     $("loginError").textContent = err.message;
@@ -477,10 +481,106 @@ form.addEventListener("submit", async (e) => {
 });
 
 function renderBearbeiter() {
+  if (ich && !ich.team) {
+    $("btnBearbeiter").textContent = `👤 ${ich.name}`;
+    $("btnBearbeiter").disabled = true;
+    return;
+  }
   $("btnBearbeiter").textContent = getBearbeiter() ? `👤 ${getBearbeiter()}` : "👤 Name setzen";
 }
 
+// ---------- Benutzerkonten ----------
+async function renderUsers() {
+  const { users } = await api("/api/users");
+  $("userListe").innerHTML = users.length
+    ? users
+        .map(
+          (u) => `<div class="doku">
+            <b>${esc(u.name)}</b> <span class="logmeta">${esc(u.benutzername)}${u.rolle === "admin" ? " · Administrator" : ""}</span>
+            <button type="button" data-pw="${u.id}">Passwort</button>
+            <button type="button" class="danger" data-user="${u.id}">Löschen</button>
+          </div>`
+        )
+        .join("")
+    : "<div class='logmeta'>Noch keine persönlichen Zugänge – es gilt das gemeinsame Passwort.</div>";
+  $("userListe")
+    .querySelectorAll("[data-pw]")
+    .forEach(
+      (b) =>
+        (b.onclick = async () => {
+          const pw = prompt("Neues Passwort (mind. 8 Zeichen):");
+          if (!pw) return;
+          try {
+            await api(`/api/users/${b.dataset.pw}/passwort`, { method: "PUT", body: { passwort: pw } });
+            $("userError").textContent = "";
+            alert("Passwort geändert.");
+          } catch (err) {
+            $("userError").textContent = err.message;
+          }
+        })
+    );
+  $("userListe")
+    .querySelectorAll("[data-user]")
+    .forEach(
+      (b) =>
+        (b.onclick = async () => {
+          if (!confirm("Zugang wirklich löschen?")) return;
+          try {
+            await api(`/api/users/${b.dataset.user}`, { method: "DELETE" });
+            await renderUsers();
+          } catch (err) {
+            $("userError").textContent = err.message;
+          }
+        })
+    );
+}
+
+$("btnBenutzer").onclick = async () => {
+  $("userError").textContent = "";
+  $("userListe").innerHTML = "Lädt …";
+  $("dlgBenutzer").showModal();
+  try {
+    await renderUsers();
+  } catch (err) {
+    $("userListe").textContent = err.message;
+  }
+};
+$("btnBenutzerClose").onclick = () => $("dlgBenutzer").close();
+
+$("userForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("userError").textContent = "";
+  const f = e.target;
+  try {
+    await api("/api/users", {
+      method: "POST",
+      body: {
+        benutzername: f.benutzername.value,
+        name: f.name.value,
+        passwort: f.passwort.value,
+        rolle: f.admin.checked ? "admin" : "user",
+      },
+    });
+    f.reset();
+    await renderUsers();
+  } catch (err) {
+    $("userError").textContent = err.message;
+  }
+});
+
+$("btnPasswort").onclick = async () => {
+  const pw = prompt("Neues eigenes Passwort (mind. 8 Zeichen):");
+  if (!pw) return;
+  try {
+    await api(`/api/users/${ich.id}/passwort`, { method: "PUT", body: { passwort: pw } });
+    alert("Passwort geändert.");
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
 $("btnBearbeiter").onclick = () => {
+  if (ich && !ich.team) return;
   const name = prompt("Dein Name (erscheint im Änderungsverlauf):", getBearbeiter());
   if (name === null) return;
   setBearbeiter(name);
@@ -529,15 +629,23 @@ async function reload() {
 
 async function start() {
   const session = await api("/api/session");
+  ich = session.user || null;
   if (!session.authed) {
     $("loginView").hidden = false;
     $("appView").hidden = true;
     $("loginBearbeiter").value = getBearbeiter();
+    $("loginBenutzer").required = session.benutzerkonten;
+    $("loginBearbeiter").hidden = session.benutzerkonten;
+    if (!session.benutzerkonten) {
+      $("loginBenutzer").placeholder = "Benutzername (leer lassen für gemeinsames Passwort)";
+    }
     if (session.usesDevDefault) $("loginError").textContent = 'Entwicklungsmodus – Passwort: "demo"';
     return;
   }
   $("loginView").hidden = true;
   $("appView").hidden = false;
+  $("btnBenutzer").hidden = ich?.rolle !== "admin";
+  $("btnPasswort").hidden = !ich || ich.team;
   renderBearbeiter();
   kategorien = (await api("/api/kategorien")).kategorien;
   fillSelects();

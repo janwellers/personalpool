@@ -13,6 +13,7 @@
     <h2>Anmelden</h2>
     <div class="hint">Mitarbeiter-Kategorisierung für die Personaldienstleistung</div>
     <form id="loginForm">
+      <input name="benutzer" id="loginBenutzer" placeholder="Benutzername" autocomplete="username" />
       <input type="password" name="password" placeholder="Passwort" autocomplete="current-password" required />
       <input name="bearbeiter" id="loginBearbeiter" placeholder="Dein Name (für den Änderungsverlauf)" autocomplete="name" />
       <div class="error" id="loginError"></div>
@@ -35,6 +36,8 @@
       <button id="btnDsgvo" title="Löschfristen und Auskunft">DSGVO</button>
       <button id="btnExportCsv">Export CSV</button>
       <button id="btnBearbeiter" title="Name für den Änderungsverlauf ändern"></button>
+      <button id="btnBenutzer" hidden title="Persönliche Zugänge verwalten">Benutzer</button>
+      <button id="btnPasswort" hidden title="Eigenes Passwort ändern">Passwort</button>
       <button id="btnLogout">Abmelden</button>
     </div>
   </header>
@@ -143,6 +146,28 @@
   </div>
   <div class="dlg-foot">
     <div style="margin-left:auto"><button type="button" id="btnKundenClose">Schließen</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgBenutzer">
+  <div class="dlg-head">Persönliche Zugänge</div>
+  <div class="dlg-body log">
+    <div class="logmeta" style="margin-bottom:10px">
+      Sobald das erste Konto angelegt ist, funktioniert das gemeinsame Passwort nicht mehr –
+      jede Änderung läuft dann auf einen Namen.
+    </div>
+    <form id="userForm" style="display:grid;gap:8px;margin-bottom:14px">
+      <input name="benutzername" placeholder="Benutzername (z. B. jan)" required autocomplete="off" />
+      <input name="name" placeholder="Anzeigename (z. B. Jan Wellers)" />
+      <input name="passwort" type="password" placeholder="Passwort (mind. 8 Zeichen)" required autocomplete="new-password" />
+      <label><input type="checkbox" name="admin" /> Darf Benutzer verwalten</label>
+      <div class="error" id="userError"></div>
+      <button class="primary" type="submit">Konto anlegen</button>
+    </form>
+    <div id="userListe"></div>
+  </div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnBenutzerClose">Schließen</button></div>
   </div>
 </dialog>
 
