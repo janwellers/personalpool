@@ -41,6 +41,12 @@ const katOf = (id) => kategorien.find((k) => k.id === id) || kategorien[0] || { 
 const getBearbeiter = () => localStorage.getItem("personalpool.bearbeiter") || "";
 const setBearbeiter = (name) => localStorage.setItem("personalpool.bearbeiter", String(name || "").trim().slice(0, 60));
 
+// Zurück zum Login, wenn der Zugang serverseitig nicht mehr gilt (z. B. Konto gelöscht).
+function sitzungBeendet(nachricht) {
+  sessionStorage.setItem("personalpool.hinweis", nachricht);
+  location.reload();
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json", "X-Bearbeiter": getBearbeiter() },
@@ -48,6 +54,9 @@ async function api(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith("/api/login") && !$("appView").hidden) {
+    sitzungBeendet(data.error || "Sitzung abgelaufen. Bitte neu anmelden.");
+  }
   if (!res.ok) {
     const err = new Error(data.error || `Fehler ${res.status}`);
     err.status = res.status;
@@ -563,6 +572,11 @@ $("userForm").addEventListener("submit", async (e) => {
       },
     });
     f.reset();
+    if (ich?.team) {
+      // Das erste Konto beendet den gemeinsamen Zugang; danach ist nur der persönliche Login gültig.
+      sitzungBeendet("Konto angelegt. Bitte jetzt mit dem persönlichen Benutzernamen anmelden.");
+      return;
+    }
     await renderUsers();
   } catch (err) {
     $("userError").textContent = err.message;
@@ -640,7 +654,10 @@ async function start() {
     if (!session.benutzerkonten) {
       $("loginBenutzer").placeholder = "Benutzername (leer lassen für gemeinsames Passwort)";
     }
-    if (session.usesDevDefault) $("loginError").textContent = 'Entwicklungsmodus – Passwort: "demo"';
+    const hinweis = sessionStorage.getItem("personalpool.hinweis");
+    sessionStorage.removeItem("personalpool.hinweis");
+    if (hinweis) $("loginError").textContent = hinweis;
+    else if (session.usesDevDefault) $("loginError").textContent = 'Entwicklungsmodus – Passwort: "demo"';
     return;
   }
   $("loginView").hidden = true;
