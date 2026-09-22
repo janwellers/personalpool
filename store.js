@@ -251,6 +251,7 @@ export async function countUsers() {
 
 export async function createUser({ benutzername, name, rolle, passwort }) {
   const login = benutzerKey(benutzername);
+  const erstesKonto = (await allUsers()).length === 0;
   if (!login || !passwort) throw Object.assign(new Error("Benutzername und Passwort sind nötig."), { status: 400 });
   if (String(passwort).length < 8) throw Object.assign(new Error("Passwort braucht mindestens 8 Zeichen."), { status: 400 });
   if ((await allUsers()).some((u) => benutzerKey(u.benutzername) === login)) {
@@ -260,7 +261,8 @@ export async function createUser({ benutzername, name, rolle, passwort }) {
     id: randomUUID(),
     benutzername: login,
     name: String(name || "").trim() || login,
-    rolle: rolle === "admin" ? "admin" : "user",
+    // Das erste Konto muss Benutzer verwalten dürfen, sonst sperrt sich die App aus.
+    rolle: erstesKonto || rolle === "admin" ? "admin" : "user",
     passwort: hashPasswort(String(passwort)),
     createdAt: new Date().toISOString(),
   };
@@ -302,6 +304,11 @@ export async function deleteUser(id) {
   if (next.length === list.length) return false;
   await writeUsers(next);
   return true;
+}
+
+export async function getUser(id) {
+  const user = (await allUsers()).find((u) => u.id === id);
+  return user ? userPublic(user) : null;
 }
 
 export async function authenticateUser(benutzername, passwort) {
@@ -381,14 +388,24 @@ async function logEvent({ employeeId, employeeName, aktion, akteur, aenderungen 
   return eintrag;
 }
 
+export async function deleteEvents(employeeId) {
+  if (usePg) {
+    await pool.query("DELETE FROM employee_events WHERE employee_id = $1", [employeeId]);
+    return;
+  }
+  await writeEvents((await readEvents()).filter((e) => e.employeeId !== employeeId));
+}
+
+// limit = null liefert alle Ereignisse (für die DSGVO-Auskunft).
 export async function listEvents({ employeeId = null, limit = 200 } = {}) {
   if (usePg) {
+    const grenze = limit === null ? "ALL" : String(Number.isFinite(Number(limit)) ? Number(limit) : 200);
     const { rows } = employeeId
       ? await pool.query(
-          "SELECT * FROM employee_events WHERE employee_id = $1 ORDER BY created_at DESC LIMIT $2",
-          [employeeId, limit]
+          `SELECT * FROM employee_events WHERE employee_id = $1 ORDER BY created_at DESC LIMIT ${grenze}`,
+          [employeeId]
         )
-      : await pool.query("SELECT * FROM employee_events ORDER BY created_at DESC LIMIT $1", [limit]);
+      : await pool.query(`SELECT * FROM employee_events ORDER BY created_at DESC LIMIT ${grenze}`);
     return rows.map((r) => ({
       id: r.id,
       employeeId: r.employee_id,
@@ -399,8 +416,10 @@ export async function listEvents({ employeeId = null, limit = 200 } = {}) {
       createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
     }));
   }
-  const list = (await readEvents()).filter((e) => !employeeId || e.employeeId === employeeId);
-  return list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, limit);
+  const list = (await readEvents())
+    .filter((e) => !employeeId || e.employeeId === employeeId)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return limit === null ? list : list.slice(0, limit);
 }
 
 export async function initStore() {
@@ -574,7 +593,8 @@ export async function deleteEmployee(id, akteur) {
   if (usePg) {
     const { rowCount } = await pool.query("DELETE FROM employees WHERE id = $1", [id]);
     if (!rowCount) return false;
-    await logEvent({ employeeId: id, employeeName: vorher?.name || "(gelöscht)", aktion: "gelöscht", akteur });
+    await deleteEvents(id);
+    await logEvent({ employeeId: null, employeeName: "(gelöschter Datensatz)", aktion: "gelöscht", akteur });
     return true;
   }
   const list = await readAll();
@@ -584,6 +604,7 @@ export async function deleteEmployee(id, akteur) {
   const docs = await readDocs();
   for (const d of docs.filter((d) => d.employeeId === id)) await rm(join(DOC_DIR, d.id), { force: true });
   await writeDocs(docs.filter((d) => d.employeeId !== id));
-  await logEvent({ employeeId: id, employeeName: vorher?.name || "(gelöscht)", aktion: "gelöscht", akteur });
+  await deleteEvents(id);
+  await logEvent({ employeeId: null, employeeName: "(gelöschter Datensatz)", aktion: "gelöscht", akteur });
   return true;
 }

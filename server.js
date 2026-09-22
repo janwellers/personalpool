@@ -19,6 +19,7 @@ import {
   createUser,
   setUserPassword,
   deleteUser,
+  getUser,
   authenticateUser,
   storageBackend,
   KATEGORIEN,
@@ -28,7 +29,6 @@ import {
   setAuthCookie,
   clearAuthCookie,
   currentUser,
-  requireAuth,
   requireAdmin,
   loginEnabled,
   usesDevDefault,
@@ -40,6 +40,46 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const MAX_DOC_BYTES = 8 * 1024 * 1024;
+const MAX_LOGIN_VERSUCHE = 10;
+const LOGIN_FENSTER_MS = 5 * 60 * 1000;
+
+// Einfache Bremse gegen Passwortraten: je Absender wenige Fehlversuche pro Zeitfenster.
+const versuche = new Map();
+
+function loginGesperrt(ip) {
+  const eintrag = versuche.get(ip);
+  if (!eintrag || Date.now() - eintrag.seit > LOGIN_FENSTER_MS) {
+    versuche.delete(ip);
+    return false;
+  }
+  return eintrag.anzahl >= MAX_LOGIN_VERSUCHE;
+}
+
+function loginFehlversuch(ip) {
+  const eintrag = versuche.get(ip);
+  if (!eintrag || Date.now() - eintrag.seit > LOGIN_FENSTER_MS) versuche.set(ip, { anzahl: 1, seit: Date.now() });
+  else eintrag.anzahl += 1;
+}
+
+// Rolle und Existenz kommen aus dem Speicher, damit gelöschte Konten sofort gesperrt sind.
+async function aktuellerBenutzer(req) {
+  const aus_cookie = currentUser(req);
+  if (!aus_cookie) return null;
+  if (aus_cookie.team) return (await countUsers()) > 0 ? null : aus_cookie;
+  const user = await getUser(aus_cookie.id);
+  return user ? { ...user, team: false } : null;
+}
+
+async function requireUser(req, res, next) {
+  try {
+    const user = await aktuellerBenutzer(req);
+    if (!user) return res.status(401).json({ ok: false, error: "Nicht angemeldet." });
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
 
 app.use(express.json({ limit: "12mb" }));
 app.use(express.static(join(__dirname, "public")));
@@ -50,7 +90,7 @@ app.get("/api/health", (req, res) => {
 
 app.get("/api/session", async (req, res, next) => {
   try {
-    const user = currentUser(req);
+    const user = await aktuellerBenutzer(req);
     res.json({
       ok: true,
       authed: Boolean(user),
@@ -69,9 +109,17 @@ app.post("/api/login", async (req, res, next) => {
   try {
     const benutzer = String(req.body?.benutzer || "").trim();
     const passwort = String(req.body?.password || "");
+    const ip = req.ip || req.socket.remoteAddress || "unbekannt";
+    if (loginGesperrt(ip)) {
+      return res.status(429).json({ ok: false, error: "Zu viele Versuche. Bitte in ein paar Minuten erneut probieren." });
+    }
     if (benutzer) {
       const user = await authenticateUser(benutzer, passwort);
-      if (!user) return res.status(401).json({ ok: false, error: "Benutzername oder Passwort stimmt nicht." });
+      if (!user) {
+        loginFehlversuch(ip);
+        return res.status(401).json({ ok: false, error: "Benutzername oder Passwort stimmt nicht." });
+      }
+      versuche.delete(ip);
       setAuthCookie(res, user);
       return res.json({ ok: true, user });
     }
@@ -79,7 +127,11 @@ app.post("/api/login", async (req, res, next) => {
       return res.status(401).json({ ok: false, error: "Bitte mit deinem persönlichen Benutzernamen anmelden." });
     }
     if (!loginEnabled) return res.status(503).json({ ok: false, error: "Kein Passwort konfiguriert (APP_PASSWORD)." });
-    if (!checkPassword(passwort)) return res.status(401).json({ ok: false, error: "Falsches Passwort." });
+    if (!checkPassword(passwort)) {
+      loginFehlversuch(ip);
+      return res.status(401).json({ ok: false, error: "Falsches Passwort." });
+    }
+    versuche.delete(ip);
     setAuthCookie(res, TEAM_USER);
     res.json({ ok: true, user: TEAM_USER });
   } catch (err) {
@@ -87,7 +139,7 @@ app.post("/api/login", async (req, res, next) => {
   }
 });
 
-app.get("/api/users", requireAuth, requireAdmin, async (req, res, next) => {
+app.get("/api/users", requireUser, requireAdmin, async (req, res, next) => {
   try {
     res.json({ ok: true, users: await listUsers() });
   } catch (err) {
@@ -95,7 +147,7 @@ app.get("/api/users", requireAuth, requireAdmin, async (req, res, next) => {
   }
 });
 
-app.post("/api/users", requireAuth, requireAdmin, async (req, res, next) => {
+app.post("/api/users", requireUser, requireAdmin, async (req, res, next) => {
   try {
     res.status(201).json({ ok: true, user: await createUser(req.body || {}) });
   } catch (err) {
@@ -103,7 +155,7 @@ app.post("/api/users", requireAuth, requireAdmin, async (req, res, next) => {
   }
 });
 
-app.put("/api/users/:id/passwort", requireAuth, async (req, res, next) => {
+app.put("/api/users/:id/passwort", requireUser, async (req, res, next) => {
   try {
     if (req.user.rolle !== "admin" && req.user.id !== req.params.id) {
       return res.status(403).json({ ok: false, error: "Nur das eigene Passwort ist änderbar." });
@@ -116,7 +168,7 @@ app.put("/api/users/:id/passwort", requireAuth, async (req, res, next) => {
   }
 });
 
-app.delete("/api/users/:id", requireAuth, requireAdmin, async (req, res, next) => {
+app.delete("/api/users/:id", requireUser, requireAdmin, async (req, res, next) => {
   try {
     if (req.user.id === req.params.id) {
       return res.status(400).json({ ok: false, error: "Das eigene Konto kann nicht gelöscht werden." });
@@ -142,7 +194,7 @@ const akteurOf = (req) =>
 
 app.get("/api/kategorien", (req, res) => res.json({ ok: true, kategorien: KATEGORIEN }));
 
-app.get("/api/employees", requireAuth, async (req, res, next) => {
+app.get("/api/employees", requireUser, async (req, res, next) => {
   try {
     res.json({ ok: true, employees: await listEmployees() });
   } catch (err) {
@@ -150,7 +202,7 @@ app.get("/api/employees", requireAuth, async (req, res, next) => {
   }
 });
 
-app.post("/api/employees", requireAuth, async (req, res, next) => {
+app.post("/api/employees", requireUser, async (req, res, next) => {
   try {
     if (!String(req.body?.name || "").trim()) {
       return res.status(400).json({ ok: false, error: "Name fehlt." });
@@ -171,7 +223,7 @@ app.post("/api/employees", requireAuth, async (req, res, next) => {
   }
 });
 
-app.put("/api/employees/:id", requireAuth, async (req, res, next) => {
+app.put("/api/employees/:id", requireUser, async (req, res, next) => {
   try {
     if (!String(req.body?.name || "").trim()) {
       return res.status(400).json({ ok: false, error: "Name fehlt." });
@@ -184,7 +236,8 @@ app.put("/api/employees/:id", requireAuth, async (req, res, next) => {
   }
 });
 
-app.delete("/api/employees/:id", requireAuth, async (req, res, next) => {
+// Endgültiges Löschen ist eine DSGVO-Aktion und bleibt Administratoren vorbehalten.
+app.delete("/api/employees/:id", requireUser, requireAdmin, async (req, res, next) => {
   try {
     const removed = await deleteEmployee(req.params.id, akteurOf(req));
     if (!removed) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
@@ -194,7 +247,7 @@ app.delete("/api/employees/:id", requireAuth, async (req, res, next) => {
   }
 });
 
-app.get("/api/employees/:id/documents", requireAuth, async (req, res, next) => {
+app.get("/api/employees/:id/documents", requireUser, async (req, res, next) => {
   try {
     res.json({ ok: true, documents: await listDocuments(req.params.id) });
   } catch (err) {
@@ -202,8 +255,9 @@ app.get("/api/employees/:id/documents", requireAuth, async (req, res, next) => {
   }
 });
 
-app.post("/api/employees/:id/documents", requireAuth, async (req, res, next) => {
+app.post("/api/employees/:id/documents", requireUser, async (req, res, next) => {
   try {
+    if (!(await getEmployee(req.params.id))) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
     const dateiname = String(req.body?.dateiname || "").trim().slice(0, 200);
     const base64 = String(req.body?.inhalt || "");
     if (!dateiname || !base64) return res.status(400).json({ ok: false, error: "Datei fehlt." });
@@ -223,7 +277,7 @@ app.post("/api/employees/:id/documents", requireAuth, async (req, res, next) => 
   }
 });
 
-app.get("/api/documents/:id", requireAuth, async (req, res, next) => {
+app.get("/api/documents/:id", requireUser, async (req, res, next) => {
   try {
     const doc = await getDocument(req.params.id);
     if (!doc) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
@@ -235,7 +289,7 @@ app.get("/api/documents/:id", requireAuth, async (req, res, next) => {
   }
 });
 
-app.delete("/api/documents/:id", requireAuth, async (req, res, next) => {
+app.delete("/api/documents/:id", requireUser, async (req, res, next) => {
   try {
     const removed = await deleteDocument(req.params.id, akteurOf(req));
     if (!removed) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
@@ -246,7 +300,7 @@ app.delete("/api/documents/:id", requireAuth, async (req, res, next) => {
 });
 
 // DSGVO-Auskunft: alle gespeicherten Daten einer Person als Datei.
-app.get("/api/employees/:id/auskunft", requireAuth, async (req, res, next) => {
+app.get("/api/employees/:id/auskunft", requireUser, async (req, res, next) => {
   try {
     const employee = await getEmployee(req.params.id);
     if (!employee) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
@@ -255,7 +309,7 @@ app.get("/api/employees/:id/auskunft", requireAuth, async (req, res, next) => {
       hinweis:
         "Auskunft nach Art. 15 DSGVO: alle zu dieser Person gespeicherten Daten, inkl. Änderungsverlauf und Dokumentenliste.",
       stammdaten: employee,
-      aenderungsverlauf: await listEvents({ employeeId: employee.id, limit: 500 }),
+      aenderungsverlauf: await listEvents({ employeeId: employee.id, limit: null }),
       dokumente: await listDocuments(employee.id),
     };
     const datei = `auskunft-${employee.name.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase() || "mitarbeiter"}.json`;
@@ -267,7 +321,7 @@ app.get("/api/employees/:id/auskunft", requireAuth, async (req, res, next) => {
   }
 });
 
-app.get("/api/events", requireAuth, async (req, res, next) => {
+app.get("/api/events", requireUser, async (req, res, next) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 200, 500);
     const events = await listEvents({ employeeId: req.query.employeeId || null, limit });

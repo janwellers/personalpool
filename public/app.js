@@ -32,6 +32,7 @@ let daten = [];
 let filterKat = "alle";
 let editId = null;
 let ich = null;
+const istAdmin = () => ich?.rolle === "admin";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -344,7 +345,7 @@ function renderDsgvo() {
             <div class="logmeta">Zuletzt bearbeitet: ${zeitpunkt(m.updatedAt || m.createdAt)} · seit ${Math.floor(monateSeit(m.updatedAt || m.createdAt))} Monaten unverändert</div>
             <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
               <a href="/api/employees/${m.id}/auskunft" download>Auskunft herunterladen</a>
-              <button type="button" class="danger" data-del="${m.id}">Löschen</button>
+              ${istAdmin() ? `<button type="button" class="danger" data-del="${m.id}">Löschen</button>` : ""}
             </div>
           </div>`
         )
@@ -434,7 +435,7 @@ function openDialog(id) {
   $("einsaetze").innerHTML = "";
   const m = daten.find((x) => x.id === id);
   $("dlgTitle").textContent = m ? "Mitarbeiter bearbeiten" : "Mitarbeiter anlegen";
-  $("btnDelete").hidden = !m;
+  $("btnDelete").hidden = !m || !istAdmin();
   $("btnAuskunft").hidden = !m;
   if (m) {
     for (const el of form.elements) {

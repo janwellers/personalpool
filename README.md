@@ -55,3 +55,7 @@ Deployment auf Render ist über `render.yaml` vorbereitet.
 Beim ersten Mal mit dem gemeinsamen Passwort anmelden (Benutzername leer lassen), dann oben
 über **Benutzer** das eigene Konto als Administrator anlegen. Ab dem ersten Konto wird das
 gemeinsame Passwort abgelehnt und jede Änderung läuft auf einen Namen.
+
+Das erste Konto wird immer als Administrator angelegt, damit die Benutzerverwaltung erreichbar
+bleibt. Endgültiges Löschen von Mitarbeitern ist Administratoren vorbehalten; dabei werden
+Dokumente und Verlaufseinträge der Person mit entfernt.
