@@ -13,7 +13,9 @@
     <h2>Anmelden</h2>
     <div class="hint">Mitarbeiter-Kategorisierung für die Personaldienstleistung</div>
     <form id="loginForm">
+      <input name="benutzer" id="loginBenutzer" placeholder="Benutzername" autocomplete="username" />
       <input type="password" name="password" placeholder="Passwort" autocomplete="current-password" required />
+      <input name="bearbeiter" id="loginBearbeiter" placeholder="Dein Name (für den Änderungsverlauf)" autocomplete="name" />
       <div class="error" id="loginError"></div>
       <button class="primary" type="submit">Anmelden</button>
     </form>
@@ -28,7 +30,14 @@
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="primary" id="btnNew">+ Mitarbeiter</button>
+      <button id="btnFristen">Fristen</button>
+      <button id="btnKunden">Kunden</button>
+      <button id="btnLog">Verlauf</button>
+      <button id="btnDsgvo" title="Löschfristen und Auskunft">DSGVO</button>
       <button id="btnExportCsv">Export CSV</button>
+      <button id="btnBearbeiter" title="Name für den Änderungsverlauf ändern"></button>
+      <button id="btnBenutzer" hidden title="Persönliche Zugänge verwalten">Benutzer</button>
+      <button id="btnPasswort" hidden title="Eigenes Passwort ändern">Passwort</button>
       <button id="btnLogout">Abmelden</button>
     </div>
   </header>
@@ -38,7 +47,7 @@
     <div class="cats" id="cats"></div>
 
     <div class="toolbar">
-      <input id="q" placeholder="Suche: Name, Sprache, Ort, Firma, Erfahrung …" style="flex:1;min-width:240px" />
+      <input id="q" class="grow" placeholder="Suche: Name, Sprache, Ort, Firma, Erfahrung …" />
       <select id="fStapler">
         <option value="">Staplerschein: egal</option>
         <option value="ja">mit Staplerschein</option>
@@ -95,6 +104,15 @@
       <label>Kontakt<input name="kontakt" placeholder="Telefon / E-Mail" /></label>
       <label>Verfügbar ab<input name="verfuegbar" type="date" /></label>
 
+      <label>Staplerschein gültig bis<input name="staplerscheinBis" type="date" /></label>
+      <label>Aktueller Einsatz endet am<input name="einsatzEnde" type="date" /></label>
+
+      <div class="full" id="dokuBereich" hidden>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dokumente (Staplerschein, Ausweis, Lebenslauf … max. 8 MB)</div>
+        <div id="dokuListe"></div>
+        <input type="file" id="dokuDatei" />
+      </div>
+
       <label class="full">Interne Notiz (Grund für die Kategorie)
         <textarea name="notiz" rows="2" placeholder="z. B. zuverlässig, aber nur Frühschicht"></textarea>
       </label>
@@ -103,12 +121,83 @@
     </div>
     <div class="dlg-foot">
       <button type="button" class="danger" id="btnDelete" hidden>Löschen</button>
+      <button type="button" id="btnAuskunft" hidden title="Alle gespeicherten Daten dieser Person als Datei">Auskunft (DSGVO)</button>
       <div style="margin-left:auto;display:flex;gap:10px">
         <button type="button" id="btnCancel">Abbrechen</button>
         <button type="submit" class="primary">Speichern</button>
       </div>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlgFristen">
+  <div class="dlg-head">Fristen und Erinnerungen</div>
+  <div class="dlg-body log" id="fristenBody"></div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnFristenClose">Schließen</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgKunden">
+  <div class="dlg-head">Einsätze nach Unternehmen</div>
+  <div class="dlg-body log">
+    <input id="kundenSuche" placeholder="Unternehmen suchen …" style="width:100%;margin-bottom:12px" />
+    <div id="kundenBody"></div>
+  </div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnKundenClose">Schließen</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgBenutzer">
+  <div class="dlg-head">Persönliche Zugänge</div>
+  <div class="dlg-body log">
+    <div class="logmeta" style="margin-bottom:10px">
+      Sobald das erste Konto angelegt ist, funktioniert das gemeinsame Passwort nicht mehr –
+      jede Änderung läuft dann auf einen Namen.
+    </div>
+    <form id="userForm" style="display:grid;gap:8px;margin-bottom:14px">
+      <input name="benutzername" placeholder="Benutzername (z. B. jan)" required autocomplete="off" />
+      <input name="name" placeholder="Anzeigename (z. B. Jan Wellers)" />
+      <input name="passwort" type="password" placeholder="Passwort (mind. 8 Zeichen)" required autocomplete="new-password" />
+      <label><input type="checkbox" name="admin" /> Darf Benutzer verwalten</label>
+      <div class="error" id="userError"></div>
+      <button class="primary" type="submit">Konto anlegen</button>
+    </form>
+    <div id="userListe"></div>
+  </div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnBenutzerClose">Schließen</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgDsgvo">
+  <div class="dlg-head">DSGVO: Löschfristen und Auskunft</div>
+  <div class="dlg-body log">
+    <div class="logmeta" style="margin-bottom:10px">
+      Personenbezogene Daten dürfen nur so lange gespeichert werden, wie sie gebraucht werden.
+      Hier siehst du Einträge, die seit der gewählten Frist nicht mehr bearbeitet wurden.
+    </div>
+    <label style="display:block;margin-bottom:12px">Aufbewahrungsfrist
+      <select id="dsgvoFrist">
+        <option value="12">12 Monate</option>
+        <option value="24" selected>24 Monate</option>
+        <option value="36">36 Monate</option>
+      </select>
+    </label>
+    <div id="dsgvoBody"></div>
+  </div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnDsgvoClose">Schließen</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgLog">
+  <div class="dlg-head" id="logTitle">Änderungsverlauf</div>
+  <div class="dlg-body log" id="logBody"></div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnLogClose">Schließen</button></div>
+  </div>
 </dialog>
 
 <script src="app.js"></script>

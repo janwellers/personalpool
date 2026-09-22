@@ -21,16 +21,26 @@ function safeEqual(a, b) {
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
 
-function makeToken() {
-  const exp = String(Date.now() + MAX_AGE_MS);
-  return `${exp}.${sign(exp)}`;
+export const TEAM_USER = { id: "team", name: "Team-Zugang", rolle: "admin", team: true };
+
+function makeToken(user) {
+  const payload = Buffer.from(
+    JSON.stringify({ id: user.id, name: user.name, rolle: user.rolle, exp: Date.now() + MAX_AGE_MS })
+  ).toString("base64url");
+  return `${payload}.${sign(payload)}`;
 }
 
-function verifyToken(token) {
-  if (!token || !token.includes(".")) return false;
-  const [exp, sig] = token.split(".");
-  if (!/^\d+$/.test(exp) || Number(exp) < Date.now()) return false;
-  return safeEqual(sig, sign(exp));
+function readToken(token) {
+  if (!token || !token.includes(".")) return null;
+  const [payload, sig] = token.split(".");
+  if (!safeEqual(sig, sign(payload))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!data?.id || Number(data.exp) < Date.now()) return null;
+    return { id: data.id, name: data.name, rolle: data.rolle, team: data.id === "team" };
+  } catch {
+    return null;
+  }
 }
 
 export function checkPassword(pw) {
@@ -49,12 +59,16 @@ function parseCookies(req) {
   return out;
 }
 
-export function isAuthed(req) {
-  return verifyToken(parseCookies(req)[COOKIE]);
+export function currentUser(req) {
+  return readToken(parseCookies(req)[COOKIE]);
 }
 
-export function setAuthCookie(res) {
-  res.cookie(COOKIE, makeToken(), {
+export function isAuthed(req) {
+  return Boolean(currentUser(req));
+}
+
+export function setAuthCookie(res, user) {
+  res.cookie(COOKIE, makeToken(user), {
     httpOnly: true,
     sameSite: "lax",
     secure: isProd,
@@ -68,6 +82,13 @@ export function clearAuthCookie(res) {
 }
 
 export function requireAuth(req, res, next) {
-  if (isAuthed(req)) return next();
-  return res.status(401).json({ ok: false, error: "Nicht angemeldet." });
+  const user = currentUser(req);
+  if (!user) return res.status(401).json({ ok: false, error: "Nicht angemeldet." });
+  req.user = user;
+  return next();
+}
+
+export function requireAdmin(req, res, next) {
+  if (req.user?.rolle !== "admin") return res.status(403).json({ ok: false, error: "Nur für Administratoren." });
+  return next();
 }

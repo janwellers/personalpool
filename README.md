@@ -20,6 +20,16 @@ und die Einsatzhistorie pro Unternehmen dokumentieren. Mehrere Kollegen arbeiten
 
 Dazu: Filter nach Kategorie, Staplerschein und Mobilität, Volltextsuche und CSV-Export.
 
+## Weitere Funktionen
+
+- **Änderungsverlauf:** wer wann welches Feld geändert, angelegt oder gelöscht hat
+- **Kundenansicht:** alle Einsätze nach Unternehmen gruppiert
+- **Duplikatprüfung:** Warnung, wenn Name oder Kontakt schon vorhanden ist
+- **Fristen:** Staplerschein-Ablauf und Einsatzende, überfällig oder in den nächsten 30 Tagen
+- **Dokumente:** Dateien pro Mitarbeiter (max. 8 MB), in der Datenbank gespeichert
+- **DSGVO:** Auskunftsexport pro Person und Übersicht lange unveränderter Datensätze
+- **Persönliche Zugänge:** Benutzerkonten mit Rollen statt eines gemeinsamen Passworts
+
 ## Lokal starten
 
 ```bash
@@ -34,8 +44,18 @@ Ohne `DATABASE_URL` werden die Daten in `data/employees.json` abgelegt (nur für
 | Variable       | Bedeutung                                                       |
 | -------------- | --------------------------------------------------------------- |
 | `DATABASE_URL` | Postgres-Verbindung (Neon/Supabase). Tabelle wird automatisch angelegt. |
-| `APP_PASSWORD` | Passwort für den Zugang. Ohne Wert ist die App in Produktion gesperrt. |
+| `APP_PASSWORD` | Gemeinsames Start-Passwort. Gilt nur, solange kein Benutzerkonto existiert. |
 | `APP_SECRET`   | Schlüssel für das Session-Cookie.                                |
 | `PORT`         | Port (Standard 3000).                                            |
 
 Deployment auf Render ist über `render.yaml` vorbereitet.
+
+## Persönliche Zugänge einrichten
+
+Beim ersten Mal mit dem gemeinsamen Passwort anmelden (Benutzername leer lassen), dann oben
+über **Benutzer** das eigene Konto als Administrator anlegen. Ab dem ersten Konto wird das
+gemeinsame Passwort abgelehnt und jede Änderung läuft auf einen Namen.
+
+Das erste Konto wird immer als Administrator angelegt, damit die Benutzerverwaltung erreichbar
+bleibt. Endgültiges Löschen von Mitarbeitern ist Administratoren vorbehalten; dabei werden
+Dokumente und Verlaufseinträge der Person mit entfernt.
