@@ -20,6 +20,7 @@ import {
   setUserPassword,
   deleteUser,
   getUser,
+  ensureSessionSecret,
   authenticateUser,
   storageBackend,
   KATEGORIEN,
@@ -30,6 +31,7 @@ import {
   clearAuthCookie,
   currentUser,
   requireAdmin,
+  setSessionSecret,
   loginEnabled,
   usesDevDefault,
   TEAM_USER,
@@ -173,6 +175,10 @@ app.delete("/api/users/:id", requireUser, requireAdmin, async (req, res, next) =
     if (req.user.id === req.params.id) {
       return res.status(400).json({ ok: false, error: "Das eigene Konto kann nicht gelöscht werden." });
     }
+    // Ohne verbleibendes Konto würde der gemeinsame Zugang wieder gelten.
+    if ((await countUsers()) <= 1) {
+      return res.status(409).json({ ok: false, error: "Das letzte Konto kann nicht gelöscht werden." });
+    }
     const ok = await deleteUser(req.params.id);
     if (!ok) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
     res.json({ ok: true });
@@ -281,7 +287,9 @@ app.get("/api/documents/:id", requireUser, async (req, res, next) => {
   try {
     const doc = await getDocument(req.params.id);
     if (!doc) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
-    res.setHeader("Content-Type", doc.mime);
+    // Immer als Download ausliefern, damit hochgeladene Dateien nicht in der App-Domain gerendert werden.
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(doc.dateiname)}`);
     res.send(doc.buffer);
   } catch (err) {
@@ -338,6 +346,9 @@ app.use((err, req, res, next) => {
 });
 
 initStore()
+  .then(async () => {
+    setSessionSecret(await ensureSessionSecret());
+  })
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Personalpool läuft auf http://localhost:${PORT} (Speicher: ${storageBackend})`);

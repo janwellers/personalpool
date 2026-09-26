@@ -214,8 +214,13 @@ function render() {
 // ---------- Fristen ----------
 const WARNTAGE = 30;
 const heute = () => new Date(new Date().toDateString());
-const tageBis = (datum) => Math.round((new Date(datum) - heute()) / 86400000);
-const dtFormat = (datum) => new Date(datum).toLocaleDateString("de-DE");
+// Reine Datumsangaben sind Kalendertage, keine UTC-Zeitpunkte.
+const alsDatum = (datum) => {
+  const teile = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(datum));
+  return teile ? new Date(Number(teile[1]), Number(teile[2]) - 1, Number(teile[3])) : new Date(datum);
+};
+const tageBis = (datum) => Math.round((alsDatum(datum) - heute()) / 86400000);
+const dtFormat = (datum) => alsDatum(datum).toLocaleDateString("de-DE");
 
 function fristen() {
   const items = [];

@@ -45,7 +45,7 @@ Ohne `DATABASE_URL` werden die Daten in `data/employees.json` abgelegt (nur für
 | -------------- | --------------------------------------------------------------- |
 | `DATABASE_URL` | Postgres-Verbindung (Neon/Supabase). Tabelle wird automatisch angelegt. |
 | `APP_PASSWORD` | Gemeinsames Start-Passwort. Gilt nur, solange kein Benutzerkonto existiert. |
-| `APP_SECRET`   | Schlüssel für das Session-Cookie.                                |
+| `APP_SECRET`   | Optionaler Schlüssel für das Session-Cookie. Ohne Angabe erzeugt die App einmalig einen Zufallsschlüssel und speichert ihn. |
 | `PORT`         | Port (Standard 3000).                                            |
 
 Deployment auf Render ist über `render.yaml` vorbereitet.
