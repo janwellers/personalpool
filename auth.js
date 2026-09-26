@@ -3,7 +3,12 @@ import crypto from "node:crypto";
 
 const isProd = process.env.NODE_ENV === "production";
 const APP_PASSWORD = process.env.APP_PASSWORD || (isProd ? "" : "demo");
-const SECRET = process.env.APP_SECRET || APP_PASSWORD || "personalpool-dev-secret";
+// Der Signaturschlüssel darf nicht das Login-Passwort sein; ohne APP_SECRET liefert der Speicher einen Zufallsschlüssel.
+let SECRET = process.env.APP_SECRET || "";
+
+export function setSessionSecret(secret) {
+  if (secret) SECRET = String(secret);
+}
 
 const COOKIE = "pp_session";
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -12,6 +17,7 @@ export const loginEnabled = Boolean(APP_PASSWORD);
 export const usesDevDefault = !process.env.APP_PASSWORD && !isProd;
 
 function sign(value) {
+  if (!SECRET) throw new Error("Sitzungsschlüssel fehlt.");
   return crypto.createHmac("sha256", SECRET).update(value).digest("hex");
 }
 

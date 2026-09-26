@@ -41,6 +41,12 @@ const katOf = (id) => kategorien.find((k) => k.id === id) || kategorien[0] || { 
 const getBearbeiter = () => localStorage.getItem("personalpool.bearbeiter") || "";
 const setBearbeiter = (name) => localStorage.setItem("personalpool.bearbeiter", String(name || "").trim().slice(0, 60));
 
+// Zurück zum Login, wenn der Zugang serverseitig nicht mehr gilt (z. B. Konto gelöscht).
+function sitzungBeendet(nachricht) {
+  sessionStorage.setItem("personalpool.hinweis", nachricht);
+  location.reload();
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json", "X-Bearbeiter": getBearbeiter() },
@@ -48,6 +54,9 @@ async function api(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith("/api/login") && !$("appView").hidden) {
+    sitzungBeendet(data.error || "Sitzung abgelaufen. Bitte neu anmelden.");
+  }
   if (!res.ok) {
     const err = new Error(data.error || `Fehler ${res.status}`);
     err.status = res.status;
@@ -121,12 +130,17 @@ function renderCats() {
   $("cats").querySelectorAll(".chip").forEach((c) => (c.onclick = () => { filterKat = c.dataset.kat; render(); }));
 }
 
+const sofortVerfuegbar = (m) => !m.verfuegbar || tageBis(m.verfuegbar) <= 0;
+
 function renderStats() {
+  const offen = fristen().length;
   $("stats").innerHTML = `
     <div class="stat">Gesamt: <b>${daten.length}</b></div>
+    <div class="stat">Sofort verfügbar: <b>${daten.filter(sofortVerfuegbar).length}</b></div>
     <div class="stat">Mit Staplerschein: <b>${daten.filter((m) => m.staplerschein).length}</b></div>
     <div class="stat">Wiedereinstellbar: <b>${daten.filter((m) => m.wiedereinstellbar).length}</b></div>
-    <div class="stat">Offene Fristen: <b>${fristen().length}</b></div>`;
+    <div class="stat klickbar ${offen ? "warn" : ""}" id="statFristen">Offene Fristen: <b>${offen}</b></div>`;
+  $("statFristen").onclick = () => $("btnFristen").click();
 }
 
 function passt(m) {
@@ -142,6 +156,37 @@ function passt(m) {
 
 function zeile(label, wert) {
   return wert ? `<div class="row"><span>${label}</span><span>${esc(wert)}</span></div>` : "";
+}
+
+function bewertungHtml(m) {
+  return m.bewertung ? `<span class="sterne">${"★".repeat(Number(m.bewertung))}<span class="leer">${"★".repeat(5 - Number(m.bewertung))}</span></span>` : "";
+}
+
+function renderTabelle(liste) {
+  $("tabelle").innerHTML = `<table>
+    <thead><tr><th>Name</th><th>Kategorie</th><th>Bewertung</th><th>Wohnort</th><th>Mobilität</th><th>Sprache(n)</th><th>Hinweise</th><th></th></tr></thead>
+    <tbody>${liste
+      .map((m) => {
+        const k = katOf(m.kategorie);
+        const hinweise = [
+          m.staplerschein && "Stapler",
+          m.schichtbereit && "Schicht",
+          m.wiedereinstellbar && "Wiedereinstellbar",
+          m.staplerscheinBis && tageBis(m.staplerscheinBis) <= WARNTAGE ? "⚠ Staplerschein" : "",
+          m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE ? "⚠ Einsatzende" : "",
+        ].filter(Boolean);
+        return `<tr class="kat-${k.id}">
+          <td><b>${esc(m.name)}</b></td>
+          <td><span class="badge kat-${k.id}">${esc(k.label)}</span></td>
+          <td>${bewertungHtml(m)}</td>
+          <td>${esc(m.wohnort)}</td>
+          <td>${esc(m.mobilitaet)}</td>
+          <td>${esc(m.sprachen)}</td>
+          <td>${hinweise.map((h) => `<span class="tag${h.startsWith("⚠") ? " warn" : ""}">${esc(h)}</span>`).join(" ")}</td>
+          <td class="nowrap"><button data-edit="${m.id}">Bearbeiten</button><button data-log="${m.id}">Verlauf</button></td>
+        </tr>`;
+      })
+      .join("")}</tbody></table>`;
 }
 
 function render() {
@@ -177,9 +222,9 @@ function render() {
       const einsaetze = (m.einsaetze || []).map(
         (e) => `<li>${esc([e.unternehmen, e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" | "))}</li>`
       );
-      return `<div class="card" style="border-left-color:${color}">
+      return `<div class="card kat-${k.id}" style="border-left-color:${color}">
         <h3>${esc(m.name)}</h3>
-        <span class="badge" style="background:${color}">${esc(k.label)}${m.bewertung ? " · " + "★".repeat(Number(m.bewertung)) : ""}</span>
+        <span class="badge kat-${k.id}">${esc(k.label)}</span> ${bewertungHtml(m)}
         <div style="margin-top:10px">
           ${zeile("Sprache", m.sprachen)}
           ${zeile("Nationalität", m.nationalitaet)}
@@ -198,15 +243,26 @@ function render() {
     })
     .join("");
 
-  $("grid").querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => openDialog(b.dataset.edit)));
-  $("grid").querySelectorAll("[data-log]").forEach((b) => (b.onclick = () => openLog(b.dataset.log)));
+  const tabelle = $("fAnsicht").value === "tabelle";
+  if (tabelle) renderTabelle(liste);
+  $("tabelle").hidden = !tabelle || liste.length === 0;
+  $("grid").hidden = tabelle;
+
+  const bereich = tabelle ? $("tabelle") : $("grid");
+  bereich.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => openDialog(b.dataset.edit)));
+  bereich.querySelectorAll("[data-log]").forEach((b) => (b.onclick = () => openLog(b.dataset.log)));
 }
 
 // ---------- Fristen ----------
 const WARNTAGE = 30;
 const heute = () => new Date(new Date().toDateString());
-const tageBis = (datum) => Math.round((new Date(datum) - heute()) / 86400000);
-const dtFormat = (datum) => new Date(datum).toLocaleDateString("de-DE");
+// Reine Datumsangaben sind Kalendertage, keine UTC-Zeitpunkte.
+const alsDatum = (datum) => {
+  const teile = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(datum));
+  return teile ? new Date(Number(teile[1]), Number(teile[2]) - 1, Number(teile[3])) : new Date(datum);
+};
+const tageBis = (datum) => Math.round((alsDatum(datum) - heute()) / 86400000);
+const dtFormat = (datum) => alsDatum(datum).toLocaleDateString("de-DE");
 
 function fristen() {
   const items = [];
@@ -563,6 +619,11 @@ $("userForm").addEventListener("submit", async (e) => {
       },
     });
     f.reset();
+    if (ich?.team) {
+      // Das erste Konto beendet den gemeinsamen Zugang; danach ist nur der persönliche Login gültig.
+      sitzungBeendet("Konto angelegt. Bitte jetzt mit dem persönlichen Benutzernamen anmelden.");
+      return;
+    }
     await renderUsers();
   } catch (err) {
     $("userError").textContent = err.message;
@@ -601,7 +662,10 @@ $("btnDelete").onclick = async () => {
   }
 };
 
-["q", "fStapler", "fMobil", "fSort"].forEach((id) => $(id).addEventListener("input", render));
+["q", "fStapler", "fMobil", "fSort", "fAnsicht"].forEach((id) => $(id).addEventListener("input", render));
+
+$("fAnsicht").value = localStorage.getItem("personalpool.ansicht") || "karten";
+$("fAnsicht").addEventListener("change", () => localStorage.setItem("personalpool.ansicht", $("fAnsicht").value));
 
 // ---------- CSV-Export ----------
 $("btnExportCsv").onclick = () => {
@@ -640,7 +704,10 @@ async function start() {
     if (!session.benutzerkonten) {
       $("loginBenutzer").placeholder = "Benutzername (leer lassen für gemeinsames Passwort)";
     }
-    if (session.usesDevDefault) $("loginError").textContent = 'Entwicklungsmodus – Passwort: "demo"';
+    const hinweis = sessionStorage.getItem("personalpool.hinweis");
+    sessionStorage.removeItem("personalpool.hinweis");
+    if (hinweis) $("loginError").textContent = hinweis;
+    else if (session.usesDevDefault) $("loginError").textContent = 'Entwicklungsmodus – Passwort: "demo"';
     return;
   }
   $("loginView").hidden = true;

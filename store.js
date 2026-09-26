@@ -12,6 +12,7 @@ const EVENT_FILE = join(DATA_DIR, "events.json");
 const DOC_FILE = join(DATA_DIR, "documents.json");
 const DOC_DIR = join(DATA_DIR, "docs");
 const USER_FILE = join(DATA_DIR, "users.json");
+const SECRET_FILE = join(DATA_DIR, "session-secret");
 
 const usePg = Boolean(process.env.DATABASE_URL);
 export const storageBackend = usePg ? "postgres" : "file";
@@ -133,6 +134,20 @@ export async function listDocuments(employeeId) {
     .map(docMeta);
 }
 
+// Dokumente zählen als Bearbeitung, damit die DSGVO-Aufbewahrungsansicht stimmt.
+async function touchEmployee(employeeId) {
+  const zeitpunkt = new Date().toISOString();
+  if (usePg) {
+    await pool.query("UPDATE employees SET updated_at = $2 WHERE id = $1", [employeeId, zeitpunkt]);
+    return;
+  }
+  const list = await readAll();
+  const eintrag = list.find((e) => e.id === employeeId);
+  if (!eintrag) return;
+  eintrag.updatedAt = zeitpunkt;
+  await writeAll(list);
+}
+
 export async function addDocument({ employeeId, dateiname, mime, buffer, akteur }) {
   const id = randomUUID();
   const meta = {
@@ -157,6 +172,7 @@ export async function addDocument({ employeeId, dateiname, mime, buffer, akteur 
     list.push(meta);
     await writeDocs(list);
   }
+  await touchEmployee(employeeId);
   const employee = await getEmployee(employeeId);
   await logEvent({
     employeeId,
@@ -187,6 +203,7 @@ export async function deleteDocument(id, akteur) {
     await writeDocs((await readDocs()).filter((d) => d.id !== id));
     await rm(join(DOC_DIR, id), { force: true });
   }
+  await touchEmployee(doc.employeeId);
   const employee = await getEmployee(doc.employeeId);
   await logEvent({
     employeeId: doc.employeeId,
@@ -304,6 +321,26 @@ export async function deleteUser(id) {
   if (next.length === list.length) return false;
   await writeUsers(next);
   return true;
+}
+
+// Signaturschlüssel für Sitzungscookies; wird einmal erzeugt und bleibt über Neustarts erhalten.
+export async function ensureSessionSecret() {
+  if (usePg) {
+    await pool.query("CREATE TABLE IF NOT EXISTS app_settings (schluessel TEXT PRIMARY KEY, wert TEXT NOT NULL)");
+    await pool.query("INSERT INTO app_settings (schluessel, wert) VALUES ('session_secret', $1) ON CONFLICT (schluessel) DO NOTHING", [
+      randomBytes(32).toString("hex"),
+    ]);
+    const { rows } = await pool.query("SELECT wert FROM app_settings WHERE schluessel = 'session_secret'");
+    return rows[0].wert;
+  }
+  try {
+    const vorhanden = (await readFile(SECRET_FILE, "utf8")).trim();
+    if (vorhanden) return vorhanden;
+  } catch {}
+  const secret = randomBytes(32).toString("hex");
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(SECRET_FILE, secret);
+  return secret;
 }
 
 export async function getUser(id) {
