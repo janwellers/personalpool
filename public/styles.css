@@ -21,10 +21,20 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .chip{border-radius:999px;padding:7px 14px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:13px;display:flex;gap:8px;align-items:center}
 .chip .dot{width:10px;height:10px;border-radius:50%}
 .chip.active{border-color:var(--accent);background:var(--panel2)}
+[hidden]{display:none !important}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
 .card{background:var(--panel);border:1px solid var(--line);border-left-width:5px;border-radius:12px;padding:14px}
 .card h3{margin:0;font-size:16px}
-.badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;color:#08121d;font-weight:700;margin-top:6px}
+.badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;color:#08121d;font-weight:700;margin-top:6px;letter-spacing:.3px;text-transform:uppercase}
+.badge.kat-gut{background:var(--gut)}
+.badge.kat-schlecht{background:var(--schlecht);color:#fff}
+.badge.kat-nochmal{background:var(--nochmal)}
+.badge.kat-finger{background:var(--finger);color:#fff}
+.badge.kat-student{background:var(--student);color:#fff}
+.card.kat-finger{background:#2a1418;border-color:#5d2028}
+.card.kat-schlecht{background:#251816}
+.sterne{color:#ffc53d;font-size:13px;letter-spacing:1px}
+.sterne .leer{color:#3a4557}
 .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px dashed #223044}
 .row span:first-child{color:var(--muted)}
 .row span:last-child{text-align:right}
@@ -45,6 +55,22 @@ label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute
 .stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;font-size:13px;color:var(--muted)}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px}
 .stat b{color:var(--text)}
+.stat.klickbar{cursor:pointer}
+.stat.warn{border-color:#8a5a1c;color:#ffc46b;background:#2a2114}
+.tabelle{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.tabelle table{border-collapse:collapse;width:100%;font-size:13px}
+.tabelle th{text-align:left;padding:10px 12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
+.tabelle td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tabelle tr:last-child td{border-bottom:0}
+.tabelle tbody tr{border-left:4px solid transparent}
+.tabelle tbody tr.kat-gut{border-left-color:var(--gut)}
+.tabelle tbody tr.kat-schlecht{border-left-color:var(--schlecht)}
+.tabelle tbody tr.kat-nochmal{border-left-color:var(--nochmal)}
+.tabelle tbody tr.kat-finger{border-left-color:var(--finger);background:#2a1418}
+.tabelle tbody tr.kat-student{border-left-color:var(--student)}
+.tabelle tbody tr:hover{background:var(--panel2)}
+.tabelle .nowrap{white-space:nowrap;display:flex;gap:6px}
+.tabelle button{padding:6px 10px;font-size:12px}
 .einsatz{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr)) auto;gap:8px;margin-bottom:8px;align-items:center}
 .einsatz button{padding:8px 10px}
 .doku{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
