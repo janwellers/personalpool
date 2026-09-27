@@ -48,6 +48,8 @@ const FIELDS = [
 
 const DATE_FIELDS = ["verfuegbar", "staplerscheinBis", "einsatzEnde"];
 
+const alsMonat = (wert) => (/^\d{4}-(0[1-9]|1[0-2])$/.test(String(wert || "")) ? String(wert) : "");
+
 function normalize(input) {
   const out = {};
   for (const f of FIELDS) out[f] = input[f] ?? "";
@@ -61,10 +63,12 @@ function normalize(input) {
         .map((e) => ({
           unternehmen: String(e.unternehmen || "").trim(),
           taetigkeit: String(e.taetigkeit || "").trim(),
+          von: alsMonat(e.von),
+          bis: alsMonat(e.bis),
           zeitraum: String(e.zeitraum || "").trim(),
           ergebnis: String(e.ergebnis || "").trim(),
         }))
-        .filter((e) => e.unternehmen || e.taetigkeit || e.zeitraum || e.ergebnis)
+        .filter((e) => e.unternehmen || e.taetigkeit || e.von || e.bis || e.zeitraum || e.ergebnis)
     : [];
   return out;
 }
@@ -387,7 +391,7 @@ async function writeEvents(list) {
 
 const einsatzText = (list) =>
   (list || [])
-    .map((e) => [e.unternehmen, e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" | "))
+    .map((e) => [e.unternehmen, e.taetigkeit, e.von, e.bis, e.zeitraum, e.ergebnis].filter(Boolean).join(" | "))
     .join(" ; ");
 
 function vergleiche(vorher, nachher) {
