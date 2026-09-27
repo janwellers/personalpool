@@ -21,7 +21,6 @@ const FELD_LABEL = {
   vorerfahrung: "Vorerfahrung",
   kontakt: "Kontakt",
   verfuegbar: "Verfügbar ab",
-  staplerscheinBis: "Staplerschein gültig bis",
   einsatzEnde: "Einsatzende",
   notiz: "Notiz",
   einsaetze: "Einsätze",
@@ -95,16 +94,33 @@ function fillSelects() {
 }
 
 // ---------- Einsatz-Zeilen im Formular ----------
+const monatText = (wert) => {
+  const treffer = /^(\d{4})-(\d{2})$/.exec(wert || "");
+  return treffer ? `${treffer[2]}/${treffer[1]}` : "";
+};
+
+function zeitraumText(e) {
+  const von = monatText(e.von);
+  const bis = monatText(e.bis);
+  if (von && bis) return von === bis ? von : `${von} – ${bis}`;
+  if (von) return `seit ${von}`;
+  if (bis) return `bis ${bis}`;
+  return e.zeitraum || "";
+}
+
 function addEinsatzRow(e = {}) {
   const div = document.createElement("div");
   div.className = "einsatz";
+  div.dataset.zeitraum = e.von || e.bis ? "" : e.zeitraum || "";
   div.innerHTML = `
     <input placeholder="Unternehmen" data-f="unternehmen" />
     <input placeholder="Tätigkeit" data-f="taetigkeit" />
-    <input placeholder="Zeitraum" data-f="zeitraum" />
+    <input type="month" title="Einsatz von (Monat/Jahr)" data-f="von" />
+    <input type="month" title="Einsatz bis (Monat/Jahr)" data-f="bis" />
     <input placeholder="Ergebnis" data-f="ergebnis" />
     <button type="button" title="Zeile entfernen">✕</button>`;
   div.querySelectorAll("input").forEach((i) => (i.value = e[i.dataset.f] || ""));
+  if (div.dataset.zeitraum) div.title = `Früherer Zeitraum: ${div.dataset.zeitraum}`;
   div.querySelector("button").onclick = () => div.remove();
   $("einsaetze").appendChild(div);
 }
@@ -112,8 +128,12 @@ $("btnAddEinsatz").onclick = () => addEinsatzRow();
 
 function readEinsaetze() {
   return [...$("einsaetze").querySelectorAll(".einsatz")]
-    .map((row) => Object.fromEntries([...row.querySelectorAll("input")].map((i) => [i.dataset.f, i.value.trim()])))
-    .filter((e) => e.unternehmen || e.taetigkeit || e.zeitraum || e.ergebnis);
+    .map((row) => {
+      const e = Object.fromEntries([...row.querySelectorAll("input")].map((i) => [i.dataset.f, i.value.trim()]));
+      if (!e.von && !e.bis && row.dataset.zeitraum) e.zeitraum = row.dataset.zeitraum;
+      return e;
+    })
+    .filter((e) => e.unternehmen || e.taetigkeit || e.von || e.bis || e.zeitraum || e.ergebnis);
 }
 
 // ---------- Darstellung ----------
@@ -172,7 +192,6 @@ function renderTabelle(liste) {
           m.staplerschein && "Stapler",
           m.schichtbereit && "Schicht",
           m.wiedereinstellbar && "Wiedereinstellbar",
-          m.staplerscheinBis && tageBis(m.staplerscheinBis) <= WARNTAGE ? "⚠ Staplerschein" : "",
           m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE ? "⚠ Einsatzende" : "",
         ].filter(Boolean);
         return `<tr class="kat-${k.id}">
@@ -214,13 +233,10 @@ function render() {
         m.wiedereinstellbar && "Wiedereinstellbar",
       ].filter(Boolean);
       const warnungen = [
-        m.staplerscheinBis && tageBis(m.staplerscheinBis) <= WARNTAGE
-          ? `Staplerschein ${fristText(tageBis(m.staplerscheinBis))}`
-          : "",
         m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE ? `Einsatzende ${fristText(tageBis(m.einsatzEnde))}` : "",
       ].filter(Boolean);
       const einsaetze = (m.einsaetze || []).map(
-        (e) => `<li>${esc([e.unternehmen, e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" | "))}</li>`
+        (e) => `<li>${esc([e.unternehmen, e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).join(" | "))}</li>`
       );
       return `<div class="card kat-${k.id}" style="border-left-color:${color}">
         <h3>${esc(m.name)}</h3>
@@ -267,7 +283,6 @@ const dtFormat = (datum) => alsDatum(datum).toLocaleDateString("de-DE");
 function fristen() {
   const items = [];
   for (const m of daten) {
-    if (m.staplerscheinBis) items.push({ m, art: "Staplerschein läuft ab", datum: m.staplerscheinBis, tage: tageBis(m.staplerscheinBis) });
     if (m.einsatzEnde) items.push({ m, art: "Einsatz endet", datum: m.einsatzEnde, tage: tageBis(m.einsatzEnde) });
   }
   return items.filter((i) => i.tage <= WARNTAGE).sort((a, b) => a.tage - b.tage);
@@ -321,7 +336,7 @@ function renderKunden() {
             .map(({ mitarbeiter: m, einsatz: e }) => {
               const kat = katOf(m.kategorie);
               const color = FARBEN[kat.id] || "var(--accent)";
-              const detail = [e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" · ");
+              const detail = [e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).join(" · ");
               return `<li><b>${esc(m.name)}</b> <span class="tag" style="border-color:${color};color:${color}">${esc(kat.label)}</span>${
                 detail ? ` – ${esc(detail)}` : ""
               }</li>`;
@@ -671,10 +686,10 @@ $("fAnsicht").addEventListener("change", () => localStorage.setItem("personalpoo
 $("btnExportCsv").onclick = () => {
   const cols = ["name", "kategorie", "bewertung", "sprachen", "nationalitaet", "wohnort", "mobilitaet",
     "staplerschein", "schichtbereit", "wiedereinstellbar", "vorerfahrung", "einsaetze", "kontakt", "verfuegbar",
-    "staplerscheinBis", "einsatzEnde", "notiz"];
+    "einsatzEnde", "notiz"];
   const wert = (m, c) => {
     if (c === "kategorie") return katOf(m.kategorie).label;
-    if (c === "einsaetze") return (m.einsaetze || []).map((e) => [e.unternehmen, e.taetigkeit, e.zeitraum, e.ergebnis].filter(Boolean).join(" | ")).join(" ; ");
+    if (c === "einsaetze") return (m.einsaetze || []).map((e) => [e.unternehmen, e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).join(" | ")).join(" ; ");
     return m[c];
   };
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""').replace(/\n/g, "; ")}"`;
