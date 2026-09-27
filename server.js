@@ -23,8 +23,10 @@ import {
   ensureSessionSecret,
   authenticateUser,
   storageBackend,
+  exportAll,
   KATEGORIEN,
 } from "./store.js";
+import { backupKonfiguriert, erstelleSicherung, sicherungsStatus, starteSicherungsplan } from "./backup.js";
 import {
   checkPassword,
   setAuthCookie,
@@ -329,6 +331,36 @@ app.get("/api/employees/:id/auskunft", requireUser, async (req, res, next) => {
   }
 });
 
+// Sicherung: Status und manueller Download bleiben Administratoren vorbehalten.
+app.get("/api/backup/status", requireUser, requireAdmin, async (req, res, next) => {
+  try {
+    res.json({ ok: true, ...(await sicherungsStatus()) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/api/backup/jetzt", requireUser, requireAdmin, async (req, res, next) => {
+  try {
+    if (!backupKonfiguriert) return res.status(503).json({ ok: false, error: "Kein Sicherungsziel konfiguriert." });
+    res.json({ ok: true, ergebnis: await erstelleSicherung() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/backup/download", requireUser, requireAdmin, async (req, res, next) => {
+  try {
+    const daten = await exportAll();
+    const datei = `personalpool-${daten.erstelltAm.slice(0, 10)}.json`;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(datei)}`);
+    res.send(JSON.stringify(daten, null, 2));
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.get("/api/events", requireUser, async (req, res, next) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 200, 500);
@@ -353,6 +385,7 @@ initStore()
     app.listen(PORT, () => {
       console.log(`Personalpool läuft auf http://localhost:${PORT} (Speicher: ${storageBackend})`);
       if (usesDevDefault) console.log('Dev-Login aktiv – Passwort: "demo"');
+      starteSicherungsplan();
     });
   })
   .catch((err) => {

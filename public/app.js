@@ -645,6 +645,47 @@ $("userForm").addEventListener("submit", async (e) => {
   }
 });
 
+async function renderBackup() {
+  const s = await api("/api/backup/status");
+  const letzte = s.letzte ? new Date(s.letzte).toLocaleString("de-DE") : "";
+  $("btnBackupJetzt").hidden = !s.konfiguriert;
+  $("backupStatus").innerHTML = s.konfiguriert
+    ? `Automatische Sicherung aktiv, Aufbewahrung ${s.aufbewahrungTage} Tage.<br />Letzte Sicherung: ${
+        letzte ? esc(letzte) : "noch keine"
+      }`
+    : "Noch kein Speicherziel hinterlegt – es laufen keine automatischen Sicherungen. Solange hilft nur der Download.";
+}
+
+$("btnBackup").onclick = async () => {
+  $("backupError").textContent = "";
+  $("backupStatus").textContent = "Lädt …";
+  $("dlgBackup").showModal();
+  try {
+    await renderBackup();
+  } catch (err) {
+    $("backupStatus").textContent = err.message;
+  }
+};
+$("btnBackupClose").onclick = () => $("dlgBackup").close();
+$("btnBackupDownload").onclick = () => {
+  location.href = "/api/backup/download";
+};
+$("btnBackupJetzt").onclick = async () => {
+  $("backupError").textContent = "";
+  $("btnBackupJetzt").disabled = true;
+  try {
+    const { ergebnis } = await api("/api/backup/jetzt", { method: "POST" });
+    await renderBackup();
+    $("backupStatus").innerHTML += `<br />Gesichert: ${ergebnis.mitarbeiter} Mitarbeiter, ${Math.round(
+      ergebnis.bytes / 1024
+    )} KB.`;
+  } catch (err) {
+    $("backupError").textContent = err.message;
+  } finally {
+    $("btnBackupJetzt").disabled = false;
+  }
+};
+
 $("btnPasswort").onclick = async () => {
   const pw = prompt("Neues eigenes Passwort (mind. 8 Zeichen):");
   if (!pw) return;
@@ -728,6 +769,7 @@ async function start() {
   $("loginView").hidden = true;
   $("appView").hidden = false;
   $("btnBenutzer").hidden = ich?.rolle !== "admin";
+  $("btnBackup").hidden = ich?.rolle !== "admin";
   $("btnPasswort").hidden = !ich || ich.team;
   renderBearbeiter();
   kategorien = (await api("/api/kategorien")).kategorien;
