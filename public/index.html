@@ -37,6 +37,7 @@
       <button id="btnExportCsv">Export CSV</button>
       <button id="btnBearbeiter" title="Name für den Änderungsverlauf ändern"></button>
       <button id="btnBenutzer" hidden title="Persönliche Zugänge verwalten">Benutzer</button>
+      <button id="btnBackup" hidden title="Sicherung prüfen und herunterladen">Sicherung</button>
       <button id="btnPasswort" hidden title="Eigenes Passwort ändern">Passwort</button>
       <button id="btnLogout">Abmelden</button>
     </div>
@@ -172,6 +173,25 @@
   </div>
   <div class="dlg-foot">
     <div style="margin-left:auto"><button type="button" id="btnBenutzerClose">Schließen</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgBackup">
+  <div class="dlg-head">Sicherung</div>
+  <div class="dlg-body log">
+    <div class="logmeta" style="margin-bottom:10px">
+      Alle Daten samt Verlauf und Dokumenten werden täglich automatisch gesichert, sobald ein Speicherziel
+      hinterlegt ist. Zusätzlich kannst du jederzeit eine Kopie herunterladen.
+    </div>
+    <div id="backupStatus" style="margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" id="btnBackupDownload">Backup herunterladen</button>
+      <button type="button" class="primary" id="btnBackupJetzt">Jetzt sichern</button>
+    </div>
+    <div class="error" id="backupError"></div>
+  </div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnBackupClose">Schließen</button></div>
   </div>
 </dialog>
 

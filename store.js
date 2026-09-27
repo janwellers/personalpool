@@ -13,6 +13,7 @@ const DOC_FILE = join(DATA_DIR, "documents.json");
 const DOC_DIR = join(DATA_DIR, "docs");
 const USER_FILE = join(DATA_DIR, "users.json");
 const SECRET_FILE = join(DATA_DIR, "session-secret");
+const SETTINGS_FILE = join(DATA_DIR, "settings.json");
 
 const usePg = Boolean(process.env.DATABASE_URL);
 export const storageBackend = usePg ? "postgres" : "file";
@@ -347,6 +348,62 @@ export async function ensureSessionSecret() {
   return secret;
 }
 
+// Kleine Schlüssel/Wert-Ablage für Betriebsdaten wie den Zeitpunkt der letzten Sicherung.
+export async function getSetting(schluessel) {
+  if (usePg) {
+    const { rows } = await pool.query("SELECT wert FROM app_settings WHERE schluessel = $1", [schluessel]);
+    return rows[0]?.wert || "";
+  }
+  try {
+    const parsed = JSON.parse(await readFile(SETTINGS_FILE, "utf8"));
+    return String(parsed?.[schluessel] || "");
+  } catch {
+    return "";
+  }
+}
+
+export async function setSetting(schluessel, wert) {
+  if (usePg) {
+    await pool.query(
+      "INSERT INTO app_settings (schluessel, wert) VALUES ($1, $2) ON CONFLICT (schluessel) DO UPDATE SET wert = EXCLUDED.wert",
+      [schluessel, String(wert)]
+    );
+    return;
+  }
+  let parsed = {};
+  try {
+    parsed = JSON.parse(await readFile(SETTINGS_FILE, "utf8")) || {};
+  } catch {}
+  parsed[schluessel] = String(wert);
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(SETTINGS_FILE, JSON.stringify(parsed, null, 2));
+}
+
+// Vollständiger Datenbestand für die Sicherung; Passwörter bleiben außen vor.
+export async function exportAll({ mitDokumenten = true } = {}) {
+  const mitarbeiter = await listEmployees();
+  const dokumente = [];
+  for (const m of mitarbeiter) {
+    for (const meta of await listDocuments(m.id)) {
+      if (!mitDokumenten) {
+        dokumente.push(meta);
+        continue;
+      }
+      const doc = await getDocument(meta.id).catch(() => null);
+      dokumente.push(doc ? { ...meta, inhalt: doc.buffer.toString("base64") } : meta);
+    }
+  }
+  return {
+    version: 1,
+    erstelltAm: new Date().toISOString(),
+    speicher: storageBackend,
+    mitarbeiter,
+    ereignisse: await listEvents({ limit: null }),
+    dokumente,
+    benutzer: await listUsers(),
+  };
+}
+
 export async function getUser(id) {
   const user = (await allUsers()).find((u) => u.id === id);
   return user ? userPublic(user) : null;
@@ -528,6 +585,7 @@ export async function initStore() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  await pool.query("CREATE TABLE IF NOT EXISTS app_settings (schluessel TEXT PRIMARY KEY, wert TEXT NOT NULL)");
   await pool.query("CREATE INDEX IF NOT EXISTS employee_documents_employee_idx ON employee_documents (employee_id)");
   await pool.query("CREATE INDEX IF NOT EXISTS employee_events_employee_idx ON employee_events (employee_id, created_at DESC)");
 }

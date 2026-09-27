@@ -25,10 +25,11 @@ Dazu: Filter nach Kategorie, Staplerschein und Mobilität, Volltextsuche und CSV
 - **Änderungsverlauf:** wer wann welches Feld geändert, angelegt oder gelöscht hat
 - **Kundenansicht:** alle Einsätze nach Unternehmen gruppiert
 - **Duplikatprüfung:** Warnung, wenn Name oder Kontakt schon vorhanden ist
-- **Fristen:** Staplerschein-Ablauf und Einsatzende, überfällig oder in den nächsten 30 Tagen
+- **Fristen:** Einsatzende, überfällig oder in den nächsten 30 Tagen
 - **Dokumente:** Dateien pro Mitarbeiter (max. 8 MB), in der Datenbank gespeichert
 - **DSGVO:** Auskunftsexport pro Person und Übersicht lange unveränderter Datensätze
 - **Persönliche Zugänge:** Benutzerkonten mit Rollen statt eines gemeinsamen Passworts
+- **Sicherung:** täglicher Export aller Daten in einen S3-kompatiblen Speicher, zusätzlich Download für Administratoren
 
 ## Lokal starten
 
@@ -49,6 +50,26 @@ Ohne `DATABASE_URL` werden die Daten in `data/employees.json` abgelegt (nur für
 | `PORT`         | Port (Standard 3000).                                            |
 
 Deployment auf Render ist über `render.yaml` vorbereitet.
+
+## Automatische Sicherung
+
+Sind die folgenden Variablen gesetzt, legt die App etwa einmal täglich eine komprimierte
+JSON-Sicherung (Mitarbeiter, Verlauf, Dokumente, Benutzerliste ohne Passwörter) in einem
+S3-kompatiblen Speicher ab – getestet mit Cloudflare R2 und Backblaze B2. Fehlen sie, läuft die
+App normal weiter, es werden aber keine Sicherungen erzeugt; der manuelle Download bleibt möglich.
+
+| Variable                | Bedeutung                                                       |
+| ----------------------- | --------------------------------------------------------------- |
+| `BACKUP_S3_ENDPOINT`    | Endpunkt des Speichers, z. B. `https://<konto>.r2.cloudflarestorage.com` |
+| `BACKUP_S3_BUCKET`      | Name des Buckets.                                                |
+| `BACKUP_S3_REGION`      | Region, Standard `auto` (R2). Bei AWS/Backblaze die echte Region. |
+| `BACKUP_S3_KEY_ID`      | Zugriffsschlüssel-ID.                                            |
+| `BACKUP_S3_SECRET`      | Geheimer Schlüssel.                                              |
+| `BACKUP_S3_PREFIX`      | Ordner im Bucket, Standard `personalpool`.                       |
+| `BACKUP_RETENTION_DAYS` | Aufbewahrung in Tagen, Standard 30. `0` schaltet das Aufräumen ab. |
+
+Administratoren sehen den Stand unter **Sicherung**, können dort manuell sichern und eine Kopie
+herunterladen.
 
 ## Persönliche Zugänge einrichten
 
