@@ -24,7 +24,9 @@ import {
   authenticateUser,
   storageBackend,
   exportAll,
-  KATEGORIEN,
+  getKonfiguration,
+  setKonfiguration,
+  belegteKategorien,
 } from "./store.js";
 import { backupKonfiguriert, erstelleSicherung, sicherungsStatus, starteSicherungsplan } from "./backup.js";
 import {
@@ -200,7 +202,43 @@ const akteurOf = (req) =>
     ? req.user.name
     : String(req.get("X-Bearbeiter") || "").trim().slice(0, 60) || "Team-Zugang";
 
-app.get("/api/kategorien", (req, res) => res.json({ ok: true, kategorien: KATEGORIEN }));
+// Beschriftungen, Kategorien und Auswahllisten sind frei einstellbar; die Anzeige braucht sie schon vor dem Login.
+app.get("/api/konfiguration", async (req, res, next) => {
+  try {
+    res.json({ ok: true, konfiguration: await getKonfiguration() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.put("/api/konfiguration", requireUser, requireAdmin, async (req, res, next) => {
+  try {
+    const kategorien = req.body?.kategorien;
+    if (Array.isArray(kategorien)) {
+      const kuenftig = new Set(kategorien.map((k) => k?.id));
+      const verwaist = (await belegteKategorien()).filter((id) => !kuenftig.has(id));
+      if (verwaist.length) {
+        const bisher = (await getKonfiguration()).kategorien;
+        const namen = verwaist.map((id) => bisher.find((k) => k.id === id)?.label || id);
+        return res.status(409).json({
+          ok: false,
+          error: `Noch belegt: ${namen.join(", ")}. Erst die Mitarbeiter umtragen, dann löschen.`,
+        });
+      }
+    }
+    res.json({ ok: true, konfiguration: await setKonfiguration(req.body || {}) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/kategorien", async (req, res, next) => {
+  try {
+    res.json({ ok: true, kategorien: (await getKonfiguration()).kategorien });
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.get("/api/employees", requireUser, async (req, res, next) => {
   try {

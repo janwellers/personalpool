@@ -5,19 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Mitarbeiter-Kategorisierung</title>
 <link rel="stylesheet" href="styles.css" />
+<style id="katFarben"></style>
 </head>
 <body>
 
 <section id="loginView" hidden>
   <div class="login">
-    <h2>Anmelden</h2>
-    <div class="hint">Mitarbeiter-Kategorisierung für die Personaldienstleistung</div>
+    <h2 data-t="login.titel">Anmelden</h2>
+    <div class="hint" data-t="login.hinweis">Mitarbeiter-Kategorisierung für die Personaldienstleistung</div>
     <form id="loginForm">
       <input name="benutzer" id="loginBenutzer" placeholder="Benutzername" autocomplete="username" />
       <input type="password" name="password" placeholder="Passwort" autocomplete="current-password" required />
-      <input name="bearbeiter" id="loginBearbeiter" placeholder="Dein Name (für den Änderungsverlauf)" autocomplete="name" />
+      <input name="bearbeiter" id="loginBearbeiter" data-tp="login.name" placeholder="Dein Name (für den Änderungsverlauf)" autocomplete="name" />
       <div class="error" id="loginError"></div>
-      <button class="primary" type="submit">Anmelden</button>
+      <button class="primary" type="submit" data-t="login.button">Anmelden</button>
     </form>
   </div>
 </section>
@@ -25,21 +26,22 @@
 <section id="appView" hidden>
   <header>
     <div>
-      <h1>Mitarbeiter-Kategorisierung</h1>
-      <div class="sub">Personaldienstleistung – Bewertung, Qualifikationen und Einsatzhistorie</div>
+      <h1 data-t="kopf.titel">Mitarbeiter-Kategorisierung</h1>
+      <div class="sub" data-t="kopf.untertitel">Personaldienstleistung – Bewertung, Qualifikationen und Einsatzhistorie</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="primary" id="btnNew">+ Mitarbeiter</button>
-      <button id="btnFristen">Fristen</button>
-      <button id="btnKunden">Kunden</button>
-      <button id="btnLog">Verlauf</button>
-      <button id="btnDsgvo" title="Löschfristen und Auskunft">DSGVO</button>
-      <button id="btnExportCsv">Export CSV</button>
+      <button class="primary" id="btnNew" data-t="btn.neu">+ Mitarbeiter</button>
+      <button id="btnFristen" data-t="btn.fristen">Fristen</button>
+      <button id="btnKunden" data-t="btn.kunden">Kunden</button>
+      <button id="btnLog" data-t="btn.verlauf">Verlauf</button>
+      <button id="btnDsgvo" title="Löschfristen und Auskunft" data-t="btn.dsgvo">DSGVO</button>
+      <button id="btnExportCsv" data-t="btn.csv">Export CSV</button>
       <button id="btnBearbeiter" title="Name für den Änderungsverlauf ändern"></button>
-      <button id="btnBenutzer" hidden title="Persönliche Zugänge verwalten">Benutzer</button>
-      <button id="btnBackup" hidden title="Sicherung prüfen und herunterladen">Sicherung</button>
-      <button id="btnPasswort" hidden title="Eigenes Passwort ändern">Passwort</button>
-      <button id="btnLogout">Abmelden</button>
+      <button id="btnEinstellungen" hidden title="Bezeichnungen und Kategorien anpassen" data-t="btn.einstellungen">Einstellungen</button>
+      <button id="btnBenutzer" hidden title="Persönliche Zugänge verwalten" data-t="btn.benutzer">Benutzer</button>
+      <button id="btnBackup" hidden title="Sicherung prüfen und herunterladen" data-t="btn.sicherung">Sicherung</button>
+      <button id="btnPasswort" hidden title="Eigenes Passwort ändern" data-t="btn.passwort">Passwort</button>
+      <button id="btnLogout" data-t="btn.abmelden">Abmelden</button>
     </div>
   </header>
 
@@ -48,22 +50,11 @@
     <div class="cats" id="cats"></div>
 
     <div class="toolbar">
-      <input id="q" class="grow" placeholder="Suche: Name, Sprache, Ort, Firma, Erfahrung …" />
-      <select id="fStapler">
-        <option value="">Staplerschein: egal</option>
-        <option value="ja">mit Staplerschein</option>
-        <option value="nein">ohne Staplerschein</option>
-      </select>
+      <input id="q" class="grow" data-tp="filter.suche" placeholder="Suche: Name, Sprache, Ort, Firma, Erfahrung …" />
+      <select id="fStapler"></select>
       <select id="fMobil"></select>
-      <select id="fSort">
-        <option value="name">Sortieren: Name</option>
-        <option value="kategorie">Sortieren: Kategorie</option>
-        <option value="bewertung">Sortieren: Bewertung</option>
-      </select>
-      <select id="fAnsicht" title="Darstellung">
-        <option value="karten">Ansicht: Kacheln</option>
-        <option value="tabelle">Ansicht: Tabelle</option>
-      </select>
+      <select id="fSort"></select>
+      <select id="fAnsicht" title="Darstellung"></select>
     </div>
 
     <div class="grid" id="grid"></div>
@@ -76,49 +67,49 @@
   <form id="form">
     <div class="dlg-head" id="dlgTitle">Mitarbeiter anlegen</div>
     <div class="dlg-body">
-      <label class="full">Name *<input name="name" required placeholder="Max Mustermann" /></label>
+      <label class="full"><span data-t="feld.name">Name</span> *<input name="name" required placeholder="Max Mustermann" /></label>
 
-      <label>Kategorie *<select name="kategorie" id="selKat" required></select></label>
-      <label>Bewertung (1–5)
+      <label><span data-t="feld.kategorie">Kategorie</span> *<select name="kategorie" id="selKat" required></select></label>
+      <label><span data-t="feld.bewertung">Bewertung</span>
         <select name="bewertung">
           <option value="">–</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
         </select>
       </label>
 
-      <label>Sprache(n)<input name="sprachen" placeholder="Deutsch (B2), Polnisch, Englisch" /></label>
-      <label>Nationalität<input name="nationalitaet" placeholder="z. B. Rumänien" /></label>
+      <label><span data-t="feld.sprachen">Sprache(n)</span><input name="sprachen" placeholder="Deutsch (B2), Polnisch, Englisch" /></label>
+      <label><span data-t="feld.nationalitaet">Nationalität</span><input name="nationalitaet" placeholder="z. B. Rumänien" /></label>
 
-      <label>Wohnort<input name="wohnort" placeholder="PLZ / Stadt" /></label>
-      <label>Mobilität<select name="mobilitaet" id="selMobil"></select></label>
+      <label><span data-t="feld.wohnort">Wohnort</span><input name="wohnort" placeholder="PLZ / Stadt" /></label>
+      <label><span data-t="feld.mobilitaet">Mobilität</span><select name="mobilitaet" id="selMobil"></select></label>
 
       <div class="chkrow full">
-        <label><input type="checkbox" name="staplerschein" /> Staplerschein</label>
-        <label><input type="checkbox" name="schichtbereit" /> Schichtbereit</label>
-        <label><input type="checkbox" name="wiedereinstellbar" /> Wiedereinstellbar</label>
+        <label><input type="checkbox" name="staplerschein" /> <span data-t="feld.staplerschein">Staplerschein</span></label>
+        <label><input type="checkbox" name="schichtbereit" /> <span data-t="feld.schichtbereit">Schichtbereit</span></label>
+        <label><input type="checkbox" name="wiedereinstellbar" /> <span data-t="feld.wiedereinstellbar">Wiedereinstellbar</span></label>
       </div>
 
-      <label class="full">Was konnte er/sie? – Qualifikationen &amp; Vorerfahrung
+      <label class="full"><span data-t="feld.vorerfahrung">Was konnte er/sie? – Qualifikationen &amp; Vorerfahrung</span>
         <textarea name="vorerfahrung" rows="3" placeholder="z. B. 4 Jahre Kommissionierung, Scannererfahrung, Schubmaststapler"></textarea>
       </label>
 
       <div class="full">
-        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Was hat er/sie gemacht? – Einsätze (Unternehmen, Tätigkeit, Zeitraum von/bis)</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px" data-t="feld.einsaetze.hinweis">Was hat er/sie gemacht? – Einsätze (Unternehmen, Tätigkeit, Zeitraum von/bis)</div>
         <div id="einsaetze"></div>
-        <button type="button" id="btnAddEinsatz">+ Einsatz</button>
+        <button type="button" id="btnAddEinsatz" data-t="btn.einsatz">+ Einsatz</button>
       </div>
 
-      <label>Kontakt<input name="kontakt" placeholder="Telefon / E-Mail" /></label>
-      <label>Verfügbar ab<input name="verfuegbar" type="date" /></label>
+      <label><span data-t="feld.kontakt">Kontakt</span><input name="kontakt" placeholder="Telefon / E-Mail" /></label>
+      <label><span data-t="feld.verfuegbar">Verfügbar ab</span><input name="verfuegbar" type="date" /></label>
 
-      <label>Aktueller Einsatz endet am<input name="einsatzEnde" type="date" /></label>
+      <label><span data-t="feld.einsatzEnde">Aktueller Einsatz endet am</span><input name="einsatzEnde" type="date" /></label>
 
       <div class="full" id="dokuBereich" hidden>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dokumente (Staplerschein, Ausweis, Lebenslauf … max. 8 MB)</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px" data-t="feld.dokumente">Dokumente (Staplerschein, Ausweis, Lebenslauf … max. 8 MB)</div>
         <div id="dokuListe"></div>
         <input type="file" id="dokuDatei" />
       </div>
 
-      <label class="full">Interne Notiz (Grund für die Kategorie)
+      <label class="full"><span data-t="feld.notiz">Interne Notiz (Grund für die Kategorie)</span>
         <textarea name="notiz" rows="2" placeholder="z. B. zuverlässig, aber nur Frühschicht"></textarea>
       </label>
 
@@ -136,7 +127,7 @@
 </dialog>
 
 <dialog id="dlgFristen">
-  <div class="dlg-head">Fristen und Erinnerungen</div>
+  <div class="dlg-head" data-t="titel.fristen">Fristen und Erinnerungen</div>
   <div class="dlg-body log" id="fristenBody"></div>
   <div class="dlg-foot">
     <div style="margin-left:auto"><button type="button" id="btnFristenClose">Schließen</button></div>
@@ -144,7 +135,7 @@
 </dialog>
 
 <dialog id="dlgKunden">
-  <div class="dlg-head">Einsätze nach Unternehmen</div>
+  <div class="dlg-head" data-t="titel.kunden">Einsätze nach Unternehmen</div>
   <div class="dlg-body log">
     <input id="kundenSuche" placeholder="Unternehmen suchen …" style="width:100%;margin-bottom:12px" />
     <div id="kundenBody"></div>
@@ -213,6 +204,35 @@
   </div>
   <div class="dlg-foot">
     <div style="margin-left:auto"><button type="button" id="btnDsgvoClose">Schließen</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgEinstellungen">
+  <div class="dlg-head" data-t="titel.einstellungen">Einstellungen</div>
+  <div class="dlg-body log">
+    <div class="logmeta" style="margin-bottom:12px">
+      Hier änderst du alle Bezeichnungen der Seite, die Kategorien samt Farben und die Auswahl bei der
+      Mobilität. Änderungen gelten sofort für alle. Leere Felder nehmen wieder den ursprünglichen Text.
+    </div>
+
+    <h3 style="font-size:14px;margin:0 0 8px">Kategorien</h3>
+    <div id="katEditor"></div>
+    <button type="button" id="btnKatNeu" style="margin-top:8px">+ Kategorie</button>
+
+    <h3 style="font-size:14px;margin:20px 0 8px">Mobilität zur Auswahl</h3>
+    <textarea id="mobilEditor" rows="5" style="width:100%" placeholder="Eine Möglichkeit pro Zeile"></textarea>
+
+    <h3 style="font-size:14px;margin:20px 0 8px">Bezeichnungen</h3>
+    <div id="texteEditor"></div>
+
+    <div class="error" id="einstellungenError"></div>
+  </div>
+  <div class="dlg-foot">
+    <button type="button" id="btnEinstellungenReset" title="Alle Bezeichnungen und Kategorien auf den Auslieferungszustand zurücksetzen">Zurücksetzen</button>
+    <div style="margin-left:auto;display:flex;gap:10px">
+      <button type="button" id="btnEinstellungenClose">Schließen</button>
+      <button type="button" class="primary" id="btnEinstellungenSpeichern">Speichern</button>
+    </div>
   </div>
 </dialog>
 
