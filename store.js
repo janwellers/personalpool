@@ -21,12 +21,105 @@ export const storageBackend = usePg ? "postgres" : "file";
 let pool = null;
 
 export const KATEGORIEN = [
-  { id: "gut", label: "Gute Mitarbeiter" },
-  { id: "schlecht", label: "Schlechte Mitarbeiter" },
-  { id: "nochmal", label: "Kann man nochmal gebrauchen" },
-  { id: "finger", label: "Finger von lassen!" },
-  { id: "student", label: "Studenten" },
+  { id: "gut", label: "Gute Mitarbeiter", farbe: "#2fb36a", hervorheben: false },
+  { id: "schlecht", label: "Schlechte Mitarbeiter", farbe: "#e0533d", hervorheben: false },
+  { id: "nochmal", label: "Kann man nochmal gebrauchen", farbe: "#e8b13b", hervorheben: false },
+  { id: "finger", label: "Finger von lassen!", farbe: "#b02a37", hervorheben: true },
+  { id: "student", label: "Studenten", farbe: "#7b61ff", hervorheben: false },
 ];
+
+export const MOBILITAET = [
+  "eigener PKW",
+  "Führerschein, kein PKW",
+  "ÖPNV",
+  "Fahrrad / fußläufig",
+  "keine Mobilität",
+];
+
+const KONFIG_KEY = "konfiguration";
+const standardKonfig = () => ({ kategorien: KATEGORIEN, mobilitaet: MOBILITAET, texte: {} });
+
+let konfigCache = null;
+
+const kuerzen = (wert, laenge) => String(wert ?? "").replace(/\s+/g, " ").trim().slice(0, laenge);
+const alsFarbe = (wert, ersatz) => (/^#[0-9a-fA-F]{6}$/.test(String(wert || "")) ? String(wert).toLowerCase() : ersatz);
+
+// Kategorie-Kennungen bleiben technisch, damit gespeicherte Mitarbeiter beim Umbenennen erhalten bleiben.
+const alsKennung = (label, vorhanden) => {
+  const basis =
+    kuerzen(label, 40)
+      .toLowerCase()
+      .replace(/ä/g, "ae")
+      .replace(/ö/g, "oe")
+      .replace(/ü/g, "ue")
+      .replace(/ß/g, "ss")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "kategorie";
+  let id = basis;
+  for (let n = 2; vorhanden.has(id); n += 1) id = `${basis}-${n}`;
+  return id;
+};
+
+export function normalisiereKonfig(eingabe) {
+  const standard = standardKonfig();
+  const kennungen = new Set();
+  const kategorien = (Array.isArray(eingabe?.kategorien) ? eingabe.kategorien : standard.kategorien)
+    .map((k) => {
+      const label = kuerzen(k?.label, 60);
+      if (!label) return null;
+      const id = /^[a-z0-9-]{1,40}$/.test(String(k?.id || "")) && !kennungen.has(k.id) ? String(k.id) : alsKennung(label, kennungen);
+      kennungen.add(id);
+      return { id, label, farbe: alsFarbe(k?.farbe, "#4da3ff"), hervorheben: Boolean(k?.hervorheben) };
+    })
+    .filter(Boolean)
+    .slice(0, 20);
+
+  const mobilitaet = (Array.isArray(eingabe?.mobilitaet) ? eingabe.mobilitaet : standard.mobilitaet)
+    .map((m) => kuerzen(m, 60))
+    .filter(Boolean)
+    .slice(0, 30);
+
+  const texte = {};
+  for (const [key, wert] of Object.entries(eingabe?.texte || {})) {
+    if (!/^[a-zA-Z0-9._-]{1,60}$/.test(key)) continue;
+    const text = String(wert ?? "").trim().slice(0, 400);
+    if (text) texte[key] = text;
+  }
+
+  return {
+    kategorien: kategorien.length ? kategorien : standard.kategorien,
+    mobilitaet,
+    texte,
+  };
+}
+
+export async function getKonfiguration() {
+  if (konfigCache) return konfigCache;
+  const roh = await getSetting(KONFIG_KEY);
+  let gespeichert = null;
+  try {
+    gespeichert = roh ? JSON.parse(roh) : null;
+  } catch {
+    gespeichert = null;
+  }
+  konfigCache = gespeichert ? normalisiereKonfig(gespeichert) : standardKonfig();
+  return konfigCache;
+}
+
+export async function setKonfiguration(eingabe) {
+  const konfig = normalisiereKonfig(eingabe);
+  await setSetting(KONFIG_KEY, JSON.stringify(konfig));
+  konfigCache = konfig;
+  return konfig;
+}
+
+// Kategorien, auf die Mitarbeiter verweisen, dürfen nicht verschwinden.
+export async function belegteKategorien() {
+  const mitarbeiter = await listEmployees();
+  return [...new Set(mitarbeiter.map((m) => m.kategorie).filter(Boolean))];
+}
+
+const gueltigeKategorien = () => (konfigCache?.kategorien || KATEGORIEN);
 
 const FIELDS = [
   "name",
@@ -55,7 +148,8 @@ function normalize(input) {
   const out = {};
   for (const f of FIELDS) out[f] = input[f] ?? "";
   out.name = String(out.name).trim();
-  out.kategorie = KATEGORIEN.some((k) => k.id === out.kategorie) ? out.kategorie : "nochmal";
+  const kategorien = gueltigeKategorien();
+  out.kategorie = kategorien.some((k) => k.id === out.kategorie) ? out.kategorie : kategorien[0].id;
   out.bewertung = /^[1-5]$/.test(String(out.bewertung)) ? Number(out.bewertung) : null;
   for (const f of DATE_FIELDS) out[f] = out[f] || null;
   for (const f of ["staplerschein", "schichtbereit", "wiedereinstellbar"]) out[f] = Boolean(input[f]);
@@ -401,6 +495,7 @@ export async function exportAll({ mitDokumenten = true } = {}) {
     ereignisse: await listEvents({ limit: null }),
     dokumente,
     benutzer: await listUsers(),
+    konfiguration: await getKonfiguration(),
   };
 }
 
@@ -523,6 +618,7 @@ export async function listEvents({ employeeId = null, limit = 200 } = {}) {
 export async function initStore() {
   if (!usePg) {
     await mkdir(DATA_DIR, { recursive: true });
+    await getKonfiguration();
     return;
   }
   const { default: pg } = await import("pg");
@@ -588,6 +684,7 @@ export async function initStore() {
   await pool.query("CREATE TABLE IF NOT EXISTS app_settings (schluessel TEXT PRIMARY KEY, wert TEXT NOT NULL)");
   await pool.query("CREATE INDEX IF NOT EXISTS employee_documents_employee_idx ON employee_documents (employee_id)");
   await pool.query("CREATE INDEX IF NOT EXISTS employee_events_employee_idx ON employee_events (employee_id, created_at DESC)");
+  await getKonfiguration();
 }
 
 const schluessel = (s) =>

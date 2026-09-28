@@ -1,7 +1,6 @@
 :root{
   --bg:#0f1720; --panel:#161f2b; --panel2:#1d2836; --line:#2a3747;
   --text:#e8eef6; --muted:#9bb0c6; --accent:#4da3ff;
-  --gut:#2fb36a; --schlecht:#e0533d; --nochmal:#e8b13b; --finger:#b02a37; --student:#7b61ff;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -26,13 +25,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .card{background:var(--panel);border:1px solid var(--line);border-left-width:5px;border-radius:12px;padding:14px}
 .card h3{margin:0;font-size:16px}
 .badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;color:#08121d;font-weight:700;margin-top:6px;letter-spacing:.3px;text-transform:uppercase}
-.badge.kat-gut{background:var(--gut)}
-.badge.kat-schlecht{background:var(--schlecht);color:#fff}
-.badge.kat-nochmal{background:var(--nochmal)}
-.badge.kat-finger{background:var(--finger);color:#fff}
-.badge.kat-student{background:var(--student);color:#fff}
-.card.kat-finger{background:#2a1418;border-color:#5d2028}
-.card.kat-schlecht{background:#251816}
 .sterne{color:#ffc53d;font-size:13px;letter-spacing:1px}
 .sterne .leer{color:#3a4557}
 .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px dashed #223044}
@@ -63,11 +55,6 @@ label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute
 .tabelle td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
 .tabelle tr:last-child td{border-bottom:0}
 .tabelle tbody tr{border-left:4px solid transparent}
-.tabelle tbody tr.kat-gut{border-left-color:var(--gut)}
-.tabelle tbody tr.kat-schlecht{border-left-color:var(--schlecht)}
-.tabelle tbody tr.kat-nochmal{border-left-color:var(--nochmal)}
-.tabelle tbody tr.kat-finger{border-left-color:var(--finger);background:#2a1418}
-.tabelle tbody tr.kat-student{border-left-color:var(--student)}
 .tabelle tbody tr:hover{background:var(--panel2)}
 .tabelle .nowrap{white-space:nowrap;display:flex;gap:6px}
 .tabelle button{padding:6px 10px;font-size:12px}
@@ -87,6 +74,11 @@ label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute
 .login form{display:flex;flex-direction:column;gap:12px;margin-top:16px}
 .error{color:#ff9c8e;font-size:13px;min-height:18px}
 .hint{color:var(--muted);font-size:12px}
+.katzeile{display:grid;grid-template-columns:1fr 46px auto auto;gap:8px;align-items:center;margin-bottom:8px}
+.katzeile input[type=color]{padding:2px;height:36px}
+.katzeile label{flex-direction:row;align-items:center;gap:6px;font-size:12px;white-space:nowrap}
+.textzeile{display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:10px;align-items:center;margin-bottom:6px}
+.textzeile .logmeta{overflow-wrap:anywhere}
 
 @media (max-width:700px){
   header{padding:12px 14px;gap:10px}

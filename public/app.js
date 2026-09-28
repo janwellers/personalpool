@@ -1,30 +1,67 @@
-const FARBEN = {
-  gut: "var(--gut)",
-  schlecht: "var(--schlecht)",
-  nochmal: "var(--nochmal)",
-  finger: "var(--finger)",
-  student: "var(--student)",
+// Alle sichtbaren Texte sind über die Einstellungen überschreibbar; hier stehen nur die Auslieferungswerte.
+const STANDARD_TEXTE = {
+  "feld.name": "Name",
+  "feld.kategorie": "Kategorie",
+  "feld.bewertung": "Bewertung",
+  "feld.sprachen": "Sprache(n)",
+  "feld.nationalitaet": "Nationalität",
+  "feld.wohnort": "Wohnort",
+  "feld.mobilitaet": "Mobilität",
+  "feld.staplerschein": "Staplerschein",
+  "feld.schichtbereit": "Schichtbereit",
+  "feld.wiedereinstellbar": "Wiedereinstellbar",
+  "feld.vorerfahrung.kurz": "Kann",
+  "feld.einsaetze": "Einsätze",
+  "feld.kontakt": "Kontakt",
+  "feld.verfuegbar": "Verfügbar ab",
+  "feld.einsatzEnde": "Einsatzende",
+  "feld.notiz.kurz": "Notiz",
+  "liste.alle": "Alle",
+  "liste.hinweise": "Hinweise",
+  "liste.leer": "Noch keine Mitarbeiter erfasst. Lege oben rechts den ersten an.",
+  "liste.keinTreffer": "Keine Treffer für diesen Filter.",
+  "zahl.gesamt": "Gesamt",
+  "zahl.verfuegbar": "Sofort verfügbar",
+  "zahl.staplerschein": "Mit Staplerschein",
+  "zahl.wiedereinstellbar": "Wiedereinstellbar",
+  "zahl.fristen": "Offene Fristen",
+  "filter.staplerEgal": "Staplerschein: egal",
+  "filter.staplerJa": "mit Staplerschein",
+  "filter.staplerNein": "ohne Staplerschein",
+  "filter.mobilEgal": "Mobilität: egal",
+  "filter.sortName": "Sortieren: Name",
+  "filter.sortKategorie": "Sortieren: Kategorie",
+  "filter.sortBewertung": "Sortieren: Bewertung",
+  "filter.ansichtKarten": "Ansicht: Kacheln",
+  "filter.ansichtTabelle": "Ansicht: Tabelle",
+  "titel.anlegen": "Mitarbeiter anlegen",
+  "titel.bearbeiten": "Mitarbeiter bearbeiten",
+  "titel.verlauf": "Änderungsverlauf",
+  "fristen.art": "Einsatz endet",
 };
-const MOBILITAET = ["eigener PKW", "Führerschein, kein PKW", "ÖPNV", "Fahrrad / fußläufig", "keine Mobilität"];
 
-const FELD_LABEL = {
-  name: "Name",
-  kategorie: "Kategorie",
-  bewertung: "Bewertung",
-  sprachen: "Sprache(n)",
-  nationalitaet: "Nationalität",
-  wohnort: "Wohnort",
-  mobilitaet: "Mobilität",
-  staplerschein: "Staplerschein",
-  schichtbereit: "Schichtbereit",
-  wiedereinstellbar: "Wiedereinstellbar",
-  vorerfahrung: "Vorerfahrung",
-  kontakt: "Kontakt",
-  verfuegbar: "Verfügbar ab",
-  einsatzEnde: "Einsatzende",
-  notiz: "Notiz",
-  einsaetze: "Einsätze",
+const VERLAUF_FELDER = {
+  name: "feld.name",
+  kategorie: "feld.kategorie",
+  bewertung: "feld.bewertung",
+  sprachen: "feld.sprachen",
+  nationalitaet: "feld.nationalitaet",
+  wohnort: "feld.wohnort",
+  mobilitaet: "feld.mobilitaet",
+  staplerschein: "feld.staplerschein",
+  schichtbereit: "feld.schichtbereit",
+  wiedereinstellbar: "feld.wiedereinstellbar",
+  vorerfahrung: "feld.vorerfahrung.kurz",
+  kontakt: "feld.kontakt",
+  verfuegbar: "feld.verfuegbar",
+  einsatzEnde: "feld.einsatzEnde",
+  notiz: "feld.notiz.kurz",
+  einsaetze: "feld.einsaetze",
 };
+
+let konfig = { kategorien: [], mobilitaet: [], texte: {} };
+const t = (key) => konfig.texte?.[key] || STANDARD_TEXTE[key] || key;
+const farbeOf = (kat) => kat?.farbe || "var(--accent)";
 
 let kategorien = [];
 let daten = [];
@@ -36,6 +73,32 @@ const istAdmin = () => ich?.rolle === "admin";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const katOf = (id) => kategorien.find((k) => k.id === id) || kategorien[0] || { id, label: id };
+
+// Auslieferungstexte aus dem Markup einsammeln, damit sie nur an einer Stelle stehen.
+for (const el of document.querySelectorAll("[data-t]")) STANDARD_TEXTE[el.dataset.t] ??= el.textContent.trim();
+for (const el of document.querySelectorAll("[data-tp]")) STANDARD_TEXTE[el.dataset.tp] ??= el.placeholder;
+
+function wendeTexteAn() {
+  document.title = t("kopf.titel");
+  for (const el of document.querySelectorAll("[data-t]")) el.textContent = t(el.dataset.t);
+  for (const el of document.querySelectorAll("[data-tp]")) el.placeholder = t(el.dataset.tp);
+  $("katFarben").textContent = kategorien
+    .map((k) => {
+      const dunkel = lesbarAufHell(k.farbe) ? "#08121d" : "#fff";
+      return `.badge.kat-${k.id}{background:${k.farbe};color:${dunkel}}
+.card.kat-${k.id}{border-left-color:${k.farbe}}
+.tabelle tbody tr.kat-${k.id}{border-left-color:${k.farbe}}${
+        k.hervorheben ? `\n.card.kat-${k.id}{background:${k.farbe}1f;border-color:${k.farbe}66}\n.tabelle tbody tr.kat-${k.id}{background:${k.farbe}1a}` : ""
+      }`;
+    })
+    .join("\n");
+}
+
+// Helle Kategoriefarben brauchen dunkle Schrift, dunkle helle.
+function lesbarAufHell(farbe) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(String(farbe).slice(i, i + 2), 16) || 0);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6;
+}
 
 const getBearbeiter = () => localStorage.getItem("personalpool.bearbeiter") || "";
 const setBearbeiter = (name) => localStorage.setItem("personalpool.bearbeiter", String(name || "").trim().slice(0, 60));
@@ -88,9 +151,33 @@ $("btnLogout").onclick = async () => {
 
 // ---------- Auswahlfelder ----------
 function fillSelects() {
-  $("selKat").innerHTML = kategorien.map((k) => `<option value="${k.id}">${esc(k.label)}</option>`).join("");
-  $("selMobil").innerHTML = `<option value="">–</option>` + MOBILITAET.map((m) => `<option>${m}</option>`).join("");
-  $("fMobil").innerHTML = `<option value="">Mobilität: egal</option>` + MOBILITAET.map((m) => `<option>${m}</option>`).join("");
+  const merken = { kat: $("selKat").value, mobil: $("fMobil").value, sort: $("fSort").value, stapler: $("fStapler").value };
+  const optionen = (liste) => liste.map(([wert, text]) => `<option value="${esc(wert)}">${esc(text)}</option>`).join("");
+  const mobil = konfig.mobilitaet.map((m) => [m, m]);
+
+  $("selKat").innerHTML = optionen(kategorien.map((k) => [k.id, k.label]));
+  $("selMobil").innerHTML = optionen([["", "–"], ...mobil]);
+  $("fMobil").innerHTML = optionen([["", t("filter.mobilEgal")], ...mobil]);
+  $("fStapler").innerHTML = optionen([
+    ["", t("filter.staplerEgal")],
+    ["ja", t("filter.staplerJa")],
+    ["nein", t("filter.staplerNein")],
+  ]);
+  $("fSort").innerHTML = optionen([
+    ["name", t("filter.sortName")],
+    ["kategorie", t("filter.sortKategorie")],
+    ["bewertung", t("filter.sortBewertung")],
+  ]);
+  $("fAnsicht").innerHTML = optionen([
+    ["karten", t("filter.ansichtKarten")],
+    ["tabelle", t("filter.ansichtTabelle")],
+  ]);
+
+  $("selKat").value = merken.kat || kategorien[0]?.id || "";
+  $("fMobil").value = konfig.mobilitaet.includes(merken.mobil) ? merken.mobil : "";
+  $("fSort").value = merken.sort || "name";
+  $("fStapler").value = merken.stapler || "";
+  $("fAnsicht").value = localStorage.getItem("personalpool.ansicht") || "karten";
 }
 
 // ---------- Einsatz-Zeilen im Formular ----------
@@ -138,11 +225,11 @@ function readEinsaetze() {
 
 // ---------- Darstellung ----------
 function renderCats() {
-  const items = [{ id: "alle", label: "Alle" }, ...kategorien];
+  const items = [{ id: "alle", label: t("liste.alle") }, ...kategorien];
   $("cats").innerHTML = items
     .map((k) => {
       const n = k.id === "alle" ? daten.length : daten.filter((m) => m.kategorie === k.id).length;
-      const color = k.id === "alle" ? "var(--accent)" : FARBEN[k.id] || "var(--accent)";
+      const color = k.id === "alle" ? "var(--accent)" : farbeOf(k);
       return `<div class="chip ${filterKat === k.id ? "active" : ""}" data-kat="${k.id}">
         <span class="dot" style="background:${color}"></span>${esc(k.label)} <b>${n}</b></div>`;
     })
@@ -155,11 +242,11 @@ const sofortVerfuegbar = (m) => !m.verfuegbar || tageBis(m.verfuegbar) <= 0;
 function renderStats() {
   const offen = fristen().length;
   $("stats").innerHTML = `
-    <div class="stat">Gesamt: <b>${daten.length}</b></div>
-    <div class="stat">Sofort verfügbar: <b>${daten.filter(sofortVerfuegbar).length}</b></div>
-    <div class="stat">Mit Staplerschein: <b>${daten.filter((m) => m.staplerschein).length}</b></div>
-    <div class="stat">Wiedereinstellbar: <b>${daten.filter((m) => m.wiedereinstellbar).length}</b></div>
-    <div class="stat klickbar ${offen ? "warn" : ""}" id="statFristen">Offene Fristen: <b>${offen}</b></div>`;
+    <div class="stat">${esc(t("zahl.gesamt"))}: <b>${daten.length}</b></div>
+    <div class="stat">${esc(t("zahl.verfuegbar"))}: <b>${daten.filter(sofortVerfuegbar).length}</b></div>
+    <div class="stat">${esc(t("zahl.staplerschein"))}: <b>${daten.filter((m) => m.staplerschein).length}</b></div>
+    <div class="stat">${esc(t("zahl.wiedereinstellbar"))}: <b>${daten.filter((m) => m.wiedereinstellbar).length}</b></div>
+    <div class="stat klickbar ${offen ? "warn" : ""}" id="statFristen">${esc(t("zahl.fristen"))}: <b>${offen}</b></div>`;
   $("statFristen").onclick = () => $("btnFristen").click();
 }
 
@@ -175,7 +262,7 @@ function passt(m) {
 }
 
 function zeile(label, wert) {
-  return wert ? `<div class="row"><span>${label}</span><span>${esc(wert)}</span></div>` : "";
+  return wert ? `<div class="row"><span>${esc(label)}</span><span>${esc(wert)}</span></div>` : "";
 }
 
 function bewertungHtml(m) {
@@ -184,15 +271,17 @@ function bewertungHtml(m) {
 
 function renderTabelle(liste) {
   $("tabelle").innerHTML = `<table>
-    <thead><tr><th>Name</th><th>Kategorie</th><th>Bewertung</th><th>Wohnort</th><th>Mobilität</th><th>Sprache(n)</th><th>Hinweise</th><th></th></tr></thead>
+    <thead><tr>${["feld.name", "feld.kategorie", "feld.bewertung", "feld.wohnort", "feld.mobilitaet", "feld.sprachen", "liste.hinweise"]
+      .map((k) => `<th>${esc(t(k))}</th>`)
+      .join("")}<th></th></tr></thead>
     <tbody>${liste
       .map((m) => {
         const k = katOf(m.kategorie);
         const hinweise = [
-          m.staplerschein && "Stapler",
-          m.schichtbereit && "Schicht",
-          m.wiedereinstellbar && "Wiedereinstellbar",
-          m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE ? "⚠ Einsatzende" : "",
+          m.staplerschein && t("feld.staplerschein"),
+          m.schichtbereit && t("feld.schichtbereit"),
+          m.wiedereinstellbar && t("feld.wiedereinstellbar"),
+          m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE ? `⚠ ${t("feld.einsatzEnde")}` : "",
         ].filter(Boolean);
         return `<tr class="kat-${k.id}">
           <td><b>${esc(m.name)}</b></td>
@@ -219,21 +308,21 @@ function render() {
   });
 
   $("empty").hidden = liste.length > 0;
-  $("empty").textContent = daten.length === 0
-    ? "Noch keine Mitarbeiter erfasst. Lege oben rechts den ersten an."
-    : "Keine Treffer für diesen Filter.";
+  $("empty").textContent = daten.length === 0 ? t("liste.leer") : t("liste.keinTreffer");
 
   $("grid").innerHTML = liste
     .map((m) => {
       const k = katOf(m.kategorie);
-      const color = FARBEN[k.id] || "var(--accent)";
+      const color = farbeOf(k);
       const tags = [
-        m.staplerschein && "Staplerschein",
-        m.schichtbereit && "Schichtbereit",
-        m.wiedereinstellbar && "Wiedereinstellbar",
+        m.staplerschein && t("feld.staplerschein"),
+        m.schichtbereit && t("feld.schichtbereit"),
+        m.wiedereinstellbar && t("feld.wiedereinstellbar"),
       ].filter(Boolean);
       const warnungen = [
-        m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE ? `Einsatzende ${fristText(tageBis(m.einsatzEnde))}` : "",
+        m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE
+          ? `${t("feld.einsatzEnde")} ${fristText(tageBis(m.einsatzEnde))}`
+          : "",
       ].filter(Boolean);
       const einsaetze = (m.einsaetze || []).map(
         (e) => `<li>${esc([e.unternehmen, e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).join(" | "))}</li>`
@@ -242,18 +331,18 @@ function render() {
         <h3>${esc(m.name)}</h3>
         <span class="badge kat-${k.id}">${esc(k.label)}</span> ${bewertungHtml(m)}
         <div style="margin-top:10px">
-          ${zeile("Sprache", m.sprachen)}
-          ${zeile("Nationalität", m.nationalitaet)}
-          ${zeile("Wohnort", m.wohnort)}
-          ${zeile("Mobilität", m.mobilitaet)}
-          ${zeile("Verfügbar ab", m.verfuegbar ? dtFormat(m.verfuegbar) : "")}
-          ${zeile("Kontakt", m.kontakt)}
+          ${zeile(t("feld.sprachen"), m.sprachen)}
+          ${zeile(t("feld.nationalitaet"), m.nationalitaet)}
+          ${zeile(t("feld.wohnort"), m.wohnort)}
+          ${zeile(t("feld.mobilitaet"), m.mobilitaet)}
+          ${zeile(t("feld.verfuegbar"), m.verfuegbar ? dtFormat(m.verfuegbar) : "")}
+          ${zeile(t("feld.kontakt"), m.kontakt)}
         </div>
         ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>` : ""}
         ${warnungen.length ? `<div class="tags">${warnungen.map((t) => `<span class="tag warn">⚠ ${esc(t)}</span>`).join("")}</div>` : ""}
-        ${m.vorerfahrung ? `<div style="margin-top:8px;font-size:13px"><b>Kann:</b> ${esc(m.vorerfahrung)}</div>` : ""}
-        ${einsaetze.length ? `<div style="margin-top:8px;font-size:13px"><b>Einsätze:</b><ul style="margin:6px 0 0 18px;padding:0">${einsaetze.join("")}</ul></div>` : ""}
-        ${m.notiz ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">Notiz: ${esc(m.notiz)}</div>` : ""}
+        ${m.vorerfahrung ? `<div style="margin-top:8px;font-size:13px"><b>${esc(t("feld.vorerfahrung.kurz"))}:</b> ${esc(m.vorerfahrung)}</div>` : ""}
+        ${einsaetze.length ? `<div style="margin-top:8px;font-size:13px"><b>${esc(t("feld.einsaetze"))}:</b><ul style="margin:6px 0 0 18px;padding:0">${einsaetze.join("")}</ul></div>` : ""}
+        ${m.notiz ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">${esc(t("feld.notiz.kurz"))}: ${esc(m.notiz)}</div>` : ""}
         <div class="actions"><button data-edit="${m.id}">Bearbeiten</button><button data-log="${m.id}">Verlauf</button></div>
       </div>`;
     })
@@ -283,7 +372,7 @@ const dtFormat = (datum) => alsDatum(datum).toLocaleDateString("de-DE");
 function fristen() {
   const items = [];
   for (const m of daten) {
-    if (m.einsatzEnde) items.push({ m, art: "Einsatz endet", datum: m.einsatzEnde, tage: tageBis(m.einsatzEnde) });
+    if (m.einsatzEnde) items.push({ m, art: t("fristen.art"), datum: m.einsatzEnde, tage: tageBis(m.einsatzEnde) });
   }
   return items.filter((i) => i.tage <= WARNTAGE).sort((a, b) => a.tage - b.tage);
 }
@@ -335,7 +424,7 @@ function renderKunden() {
           const zeilen = k.eintraege
             .map(({ mitarbeiter: m, einsatz: e }) => {
               const kat = katOf(m.kategorie);
-              const color = FARBEN[kat.id] || "var(--accent)";
+              const color = farbeOf(kat);
               const detail = [e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).join(" · ");
               return `<li><b>${esc(m.name)}</b> <span class="tag" style="border-color:${color};color:${color}">${esc(kat.label)}</span>${
                 detail ? ` – ${esc(detail)}` : ""
@@ -363,7 +452,7 @@ $("btnKundenClose").onclick = () => $("dlgKunden").close();
 const zeitpunkt = (iso) => new Date(iso).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
 
 function aenderungText(a) {
-  const label = FELD_LABEL[a.feld] || a.feld;
+  const label = VERLAUF_FELDER[a.feld] ? t(VERLAUF_FELDER[a.feld]) : a.feld;
   const wert = (v) => {
     if (v === "") return "–";
     if (v === "true") return "ja";
@@ -375,7 +464,7 @@ function aenderungText(a) {
 
 async function openLog(employeeId) {
   const m = daten.find((x) => x.id === employeeId);
-  $("logTitle").textContent = m ? `Änderungsverlauf – ${m.name}` : "Änderungsverlauf (alle)";
+  $("logTitle").textContent = m ? `${t("titel.verlauf")} – ${m.name}` : `${t("titel.verlauf")} (alle)`;
   $("logBody").innerHTML = "Lädt …";
   $("dlgLog").showModal();
   try {
@@ -505,7 +594,7 @@ function openDialog(id) {
   $("formError").textContent = "";
   $("einsaetze").innerHTML = "";
   const m = daten.find((x) => x.id === id);
-  $("dlgTitle").textContent = m ? "Mitarbeiter bearbeiten" : "Mitarbeiter anlegen";
+  $("dlgTitle").textContent = m ? t("titel.bearbeiten") : t("titel.anlegen");
   $("btnDelete").hidden = !m || !istAdmin();
   $("btnAuskunft").hidden = !m;
   if (m) {
@@ -686,6 +775,112 @@ $("btnBackupJetzt").onclick = async () => {
   }
 };
 
+// ---------- Einstellungen ----------
+// Gruppiert nach dem Schlüsselpräfix, damit die Liste ohne zweite Pflegestelle lesbar bleibt.
+const TEXT_GRUPPEN = [
+  ["kopf", "Seitenkopf"],
+  ["login", "Anmeldung"],
+  ["btn", "Schaltflächen"],
+  ["feld", "Felder im Mitarbeiterformular"],
+  ["filter", "Filter und Sortierung"],
+  ["zahl", "Kennzahlen"],
+  ["liste", "Liste"],
+  ["titel", "Fenstertitel"],
+  ["fristen", "Fristen"],
+];
+
+function katZeile(k = { id: "", label: "", farbe: "#4da3ff", hervorheben: false }) {
+  const div = document.createElement("div");
+  div.className = "katzeile";
+  div.dataset.id = k.id;
+  div.innerHTML = `
+    <input data-f="label" placeholder="Bezeichnung der Kategorie" />
+    <input data-f="farbe" type="color" title="Farbe" />
+    <label title="Karten dieser Kategorie farbig hinterlegen"><input type="checkbox" data-f="hervorheben" /> auffällig</label>
+    <button type="button" title="Kategorie entfernen">✕</button>`;
+  div.querySelector('[data-f="label"]').value = k.label;
+  div.querySelector('[data-f="farbe"]').value = k.farbe || "#4da3ff";
+  div.querySelector('[data-f="hervorheben"]').checked = Boolean(k.hervorheben);
+  div.querySelector("button").onclick = () => div.remove();
+  $("katEditor").appendChild(div);
+}
+
+function renderEinstellungen() {
+  $("einstellungenError").textContent = "";
+  $("katEditor").innerHTML = "";
+  kategorien.forEach(katZeile);
+  $("mobilEditor").value = konfig.mobilitaet.join("\n");
+  const gruppe = (key) => key.split(".")[0];
+  const keys = Object.keys(STANDARD_TEXTE).sort();
+  $("texteEditor").innerHTML = TEXT_GRUPPEN.map(([praefix, titel]) => {
+    const zeilen = keys
+      .filter((k) => gruppe(k) === praefix)
+      .map(
+        (k) => `<div class="textzeile">
+          <span class="logmeta">${esc(STANDARD_TEXTE[k])}</span>
+          <input data-text="${esc(k)}" value="${esc(konfig.texte?.[k] || "")}" placeholder="${esc(STANDARD_TEXTE[k])}" />
+        </div>`
+      )
+      .join("");
+    return zeilen ? `<div class="logitem"><div class="logmeta" style="margin-bottom:6px"><b>${esc(titel)}</b></div>${zeilen}</div>` : "";
+  }).join("");
+}
+
+function leseEinstellungen() {
+  const neueKategorien = [...$("katEditor").querySelectorAll(".katzeile")]
+    .map((row) => ({
+      id: row.dataset.id || undefined,
+      label: row.querySelector('[data-f="label"]').value.trim(),
+      farbe: row.querySelector('[data-f="farbe"]').value,
+      hervorheben: row.querySelector('[data-f="hervorheben"]').checked,
+    }))
+    .filter((k) => k.label);
+  const texte = {};
+  for (const input of $("texteEditor").querySelectorAll("[data-text]")) {
+    const wert = input.value.trim();
+    if (wert && wert !== STANDARD_TEXTE[input.dataset.text]) texte[input.dataset.text] = wert;
+  }
+  return {
+    kategorien: neueKategorien,
+    mobilitaet: $("mobilEditor").value.split("\n").map((z) => z.trim()).filter(Boolean),
+    texte,
+  };
+}
+
+async function speichereKonfiguration(body) {
+  konfig = (await api("/api/konfiguration", { method: "PUT", body })).konfiguration;
+  kategorien = konfig.kategorien;
+  wendeTexteAn();
+  fillSelects();
+  if (!kategorien.some((k) => k.id === filterKat)) filterKat = "alle";
+  render();
+}
+
+$("btnEinstellungen").onclick = () => {
+  renderEinstellungen();
+  $("dlgEinstellungen").showModal();
+};
+$("btnKatNeu").onclick = () => katZeile();
+$("btnEinstellungenClose").onclick = () => $("dlgEinstellungen").close();
+$("btnEinstellungenSpeichern").onclick = async () => {
+  $("einstellungenError").textContent = "";
+  try {
+    await speichereKonfiguration(leseEinstellungen());
+    $("dlgEinstellungen").close();
+  } catch (err) {
+    $("einstellungenError").textContent = err.message;
+  }
+};
+$("btnEinstellungenReset").onclick = async () => {
+  if (!confirm("Alle Bezeichnungen, Kategorien und Auswahllisten auf den Auslieferungszustand zurücksetzen?")) return;
+  try {
+    await speichereKonfiguration({});
+    renderEinstellungen();
+  } catch (err) {
+    $("einstellungenError").textContent = err.message;
+  }
+};
+
 $("btnPasswort").onclick = async () => {
   const pw = prompt("Neues eigenes Passwort (mind. 8 Zeichen):");
   if (!pw) return;
@@ -720,7 +915,6 @@ $("btnDelete").onclick = async () => {
 
 ["q", "fStapler", "fMobil", "fSort", "fAnsicht"].forEach((id) => $(id).addEventListener("input", render));
 
-$("fAnsicht").value = localStorage.getItem("personalpool.ansicht") || "karten";
 $("fAnsicht").addEventListener("change", () => localStorage.setItem("personalpool.ansicht", $("fAnsicht").value));
 
 // ---------- CSV-Export ----------
@@ -730,6 +924,7 @@ $("btnExportCsv").onclick = () => {
     "einsatzEnde", "notiz"];
   const wert = (m, c) => {
     if (c === "kategorie") return katOf(m.kategorie).label;
+    if (c === "einsatzEnde" || c === "verfuegbar") return m[c] ? dtFormat(m[c]) : "";
     if (c === "einsaetze") return (m.einsaetze || []).map((e) => [e.unternehmen, e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).join(" | ")).join(" ; ");
     return m[c];
   };
@@ -749,6 +944,9 @@ async function reload() {
 }
 
 async function start() {
+  konfig = (await api("/api/konfiguration")).konfiguration;
+  kategorien = konfig.kategorien;
+  wendeTexteAn();
   const session = await api("/api/session");
   ich = session.user || null;
   if (!session.authed) {
@@ -768,11 +966,11 @@ async function start() {
   }
   $("loginView").hidden = true;
   $("appView").hidden = false;
-  $("btnBenutzer").hidden = ich?.rolle !== "admin";
-  $("btnBackup").hidden = ich?.rolle !== "admin";
+  $("btnBenutzer").hidden = !istAdmin();
+  $("btnBackup").hidden = !istAdmin();
+  $("btnEinstellungen").hidden = !istAdmin();
   $("btnPasswort").hidden = !ich || ich.team;
   renderBearbeiter();
-  kategorien = (await api("/api/kategorien")).kategorien;
   fillSelects();
   await reload();
 }
