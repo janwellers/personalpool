@@ -16,6 +16,7 @@ const STANDARD_TEXTE = {
   "feld.verfuegbar": "Verfügbar ab",
   "feld.einsatzEnde": "Einsatzende",
   "feld.notiz.kurz": "Notiz",
+  "karte.details": "Weitere Angaben",
   "liste.alle": "Alle",
   "liste.hinweise": "Hinweise",
   "liste.leer": "Noch keine Mitarbeiter erfasst. Lege oben rechts den ersten an.",
@@ -297,6 +298,54 @@ function renderTabelle(liste) {
       .join("")}</tbody></table>`;
 }
 
+// Die Karte zeigt nur, was beim Überfliegen zählt; alles Weitere steckt im aufklappbaren Teil.
+function karteHtml(m) {
+  const k = katOf(m.kategorie);
+  const kern = [
+    [t("feld.wohnort"), m.wohnort],
+    [t("feld.mobilitaet"), m.mobilitaet],
+    [t("feld.verfuegbar"), m.verfuegbar ? dtFormat(m.verfuegbar) : ""],
+  ].filter(([, wert]) => wert);
+  const tags = [
+    m.staplerschein && t("feld.staplerschein"),
+    m.schichtbereit && t("feld.schichtbereit"),
+    m.wiedereinstellbar && t("feld.wiedereinstellbar"),
+  ].filter(Boolean);
+  const warnung =
+    m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE
+      ? `${t("feld.einsatzEnde")} ${fristText(tageBis(m.einsatzEnde))}`
+      : "";
+  const einsaetze = (m.einsaetze || []).map(
+    (e) => `<li>${esc([e.unternehmen, e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).join(" | "))}</li>`
+  );
+  const details = [
+    zeile(t("feld.sprachen"), m.sprachen),
+    zeile(t("feld.nationalitaet"), m.nationalitaet),
+    zeile(t("feld.kontakt"), m.kontakt),
+    m.vorerfahrung ? `<div style="margin-top:8px;font-size:13px"><b>${esc(t("feld.vorerfahrung.kurz"))}:</b> ${esc(m.vorerfahrung)}</div>` : "",
+    einsaetze.length
+      ? `<div style="margin-top:8px;font-size:13px"><b>${esc(t("feld.einsaetze"))}:</b><ul style="margin:6px 0 0 18px;padding:0">${einsaetze.join("")}</ul></div>`
+      : "",
+    m.notiz ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">${esc(t("feld.notiz.kurz"))}: ${esc(m.notiz)}</div>` : "",
+  ].filter(Boolean);
+
+  return `<div class="card kat-${k.id}">
+    <div class="kopf">
+      <div>
+        <h3>${esc(m.name)}</h3>
+        <span class="badge kat-${k.id}">${esc(k.label)}</span>
+      </div>
+      ${bewertungHtml(m)}
+    </div>
+    ${kern.length ? `<div class="kern">${kern.map(([label, wert]) => `<span>${esc(label)}: <b>${esc(wert)}</b></span>`).join("")}</div>` : ""}
+    ${tags.length || warnung ? `<div class="tags">${tags.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}${
+      warnung ? `<span class="tag warn">⚠ ${esc(warnung)}</span>` : ""
+    }</div>` : ""}
+    ${details.length ? `<details class="mehr"><summary>${esc(t("karte.details"))}</summary><div style="margin-top:8px">${details.join("")}</div></details>` : ""}
+    <div class="actions"><button data-edit="${m.id}">Bearbeiten</button><button data-log="${m.id}">Verlauf</button></div>
+  </div>`;
+}
+
 function render() {
   renderCats();
   renderStats();
@@ -310,43 +359,7 @@ function render() {
   $("empty").hidden = liste.length > 0;
   $("empty").textContent = daten.length === 0 ? t("liste.leer") : t("liste.keinTreffer");
 
-  $("grid").innerHTML = liste
-    .map((m) => {
-      const k = katOf(m.kategorie);
-      const color = farbeOf(k);
-      const tags = [
-        m.staplerschein && t("feld.staplerschein"),
-        m.schichtbereit && t("feld.schichtbereit"),
-        m.wiedereinstellbar && t("feld.wiedereinstellbar"),
-      ].filter(Boolean);
-      const warnungen = [
-        m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE
-          ? `${t("feld.einsatzEnde")} ${fristText(tageBis(m.einsatzEnde))}`
-          : "",
-      ].filter(Boolean);
-      const einsaetze = (m.einsaetze || []).map(
-        (e) => `<li>${esc([e.unternehmen, e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).join(" | "))}</li>`
-      );
-      return `<div class="card kat-${k.id}" style="border-left-color:${color}">
-        <h3>${esc(m.name)}</h3>
-        <span class="badge kat-${k.id}">${esc(k.label)}</span> ${bewertungHtml(m)}
-        <div style="margin-top:10px">
-          ${zeile(t("feld.sprachen"), m.sprachen)}
-          ${zeile(t("feld.nationalitaet"), m.nationalitaet)}
-          ${zeile(t("feld.wohnort"), m.wohnort)}
-          ${zeile(t("feld.mobilitaet"), m.mobilitaet)}
-          ${zeile(t("feld.verfuegbar"), m.verfuegbar ? dtFormat(m.verfuegbar) : "")}
-          ${zeile(t("feld.kontakt"), m.kontakt)}
-        </div>
-        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>` : ""}
-        ${warnungen.length ? `<div class="tags">${warnungen.map((t) => `<span class="tag warn">⚠ ${esc(t)}</span>`).join("")}</div>` : ""}
-        ${m.vorerfahrung ? `<div style="margin-top:8px;font-size:13px"><b>${esc(t("feld.vorerfahrung.kurz"))}:</b> ${esc(m.vorerfahrung)}</div>` : ""}
-        ${einsaetze.length ? `<div style="margin-top:8px;font-size:13px"><b>${esc(t("feld.einsaetze"))}:</b><ul style="margin:6px 0 0 18px;padding:0">${einsaetze.join("")}</ul></div>` : ""}
-        ${m.notiz ? `<div style="margin-top:8px;font-size:12px;color:var(--muted)">${esc(t("feld.notiz.kurz"))}: ${esc(m.notiz)}</div>` : ""}
-        <div class="actions"><button data-edit="${m.id}">Bearbeiten</button><button data-log="${m.id}">Verlauf</button></div>
-      </div>`;
-    })
-    .join("");
+  $("grid").innerHTML = liste.map(karteHtml).join("");
 
   const tabelle = $("fAnsicht").value === "tabelle";
   if (tabelle) renderTabelle(liste);
@@ -585,6 +598,25 @@ $("dokuDatei").addEventListener("change", async (ev) => {
   ev.target.value = "";
 });
 
+// ---------- Reiter ----------
+function initTabs(leiste) {
+  const tabs = [...leiste.querySelectorAll(".tab")];
+  const zeige = (panel) => {
+    for (const tab of tabs) {
+      const aktiv = tab.dataset.panel === panel;
+      tab.classList.toggle("active", aktiv);
+      $(tab.dataset.panel).hidden = !aktiv;
+    }
+  };
+  for (const tab of tabs) tab.onclick = () => zeige(tab.dataset.panel);
+  return zeige;
+}
+
+const zeigeFormTab = initTabs($("tabsForm"));
+const zeigeEinstellungenTab = initTabs($("tabsEinstellungen"));
+const ersterFormTab = () => zeigeFormTab("panPerson");
+const ersterEinstellungenTab = () => zeigeEinstellungenTab("panKategorien");
+
 // ---------- Dialog ----------
 const form = $("form");
 
@@ -608,9 +640,21 @@ function openDialog(id) {
     renderDokumente(m.id).catch((err) => ($("dokuListe").textContent = err.message));
   }
   $("dokuBereich").hidden = !m;
+  $("dokuHinweis").hidden = Boolean(m);
   if (!$("einsaetze").children.length) addEinsatzRow();
+  ersterFormTab();
   $("dlg").showModal();
 }
+
+// Pflichtfelder auf einem geschlossenen Reiter wären sonst unsichtbar und der Dialog schiene zu klemmen.
+form.addEventListener(
+  "invalid",
+  (e) => {
+    const panel = e.target.closest(".felder");
+    if (panel?.hidden) zeigeFormTab(panel.id);
+  },
+  true
+);
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -786,6 +830,8 @@ const TEXT_GRUPPEN = [
   ["zahl", "Kennzahlen"],
   ["liste", "Liste"],
   ["titel", "Fenstertitel"],
+  ["tab", "Reiter im Mitarbeiterformular"],
+  ["karte", "Mitarbeiterkarte"],
   ["fristen", "Fristen"],
 ];
 
@@ -858,6 +904,7 @@ async function speichereKonfiguration(body) {
 
 $("btnEinstellungen").onclick = () => {
   renderEinstellungen();
+  ersterEinstellungenTab();
   $("dlgEinstellungen").showModal();
 };
 $("btnKatNeu").onclick = () => katZeile();
