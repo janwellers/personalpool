@@ -27,6 +27,7 @@ import {
   getKonfiguration,
   setKonfiguration,
   belegteKategorien,
+  normalisiereKonfig,
 } from "./store.js";
 import { backupKonfiguriert, erstelleSicherung, sicherungsStatus, starteSicherungsplan } from "./backup.js";
 import {
@@ -213,18 +214,16 @@ app.get("/api/konfiguration", async (req, res, next) => {
 
 app.put("/api/konfiguration", requireUser, requireAdmin, async (req, res, next) => {
   try {
-    const kategorien = req.body?.kategorien;
-    if (Array.isArray(kategorien)) {
-      const kuenftig = new Set(kategorien.map((k) => k?.id));
-      const verwaist = (await belegteKategorien()).filter((id) => !kuenftig.has(id));
-      if (verwaist.length) {
-        const bisher = (await getKonfiguration()).kategorien;
-        const namen = verwaist.map((id) => bisher.find((k) => k.id === id)?.label || id);
-        return res.status(409).json({
-          ok: false,
-          error: `Noch belegt: ${namen.join(", ")}. Erst die Mitarbeiter umtragen, dann löschen.`,
-        });
-      }
+    // Gegen das Ergebnis prüfen, nicht gegen die Eingabe: auch das Zurücksetzen darf Kategorien nicht entfernen.
+    const kuenftig = new Set(normalisiereKonfig(req.body || {}).kategorien.map((k) => k.id));
+    const verwaist = (await belegteKategorien()).filter((id) => !kuenftig.has(id));
+    if (verwaist.length) {
+      const bisher = (await getKonfiguration()).kategorien;
+      const namen = verwaist.map((id) => bisher.find((k) => k.id === id)?.label || id);
+      return res.status(409).json({
+        ok: false,
+        error: `Noch belegt: ${namen.join(", ")}. Erst die Mitarbeiter umtragen, dann löschen.`,
+      });
     }
     res.json({ ok: true, konfiguration: await setKonfiguration(req.body || {}) });
   } catch (err) {

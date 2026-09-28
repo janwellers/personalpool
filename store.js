@@ -60,7 +60,7 @@ const alsKennung = (label, vorhanden) => {
   return id;
 };
 
-function normalisiereKonfig(eingabe) {
+export function normalisiereKonfig(eingabe) {
   const standard = standardKonfig();
   const kennungen = new Set();
   const kategorien = (Array.isArray(eingabe?.kategorien) ? eingabe.kategorien : standard.kategorien)
