@@ -29,6 +29,14 @@ Dazu: Filter nach Kategorie, Staplerschein und Mobilität, Volltextsuche und CSV
 - **Dokumente:** Dateien pro Mitarbeiter (max. 8 MB), in der Datenbank gespeichert
 - **DSGVO:** Auskunftsexport pro Person und Übersicht lange unveränderter Datensätze
 - **Persönliche Zugänge:** Benutzerkonten mit Rollen statt eines gemeinsamen Passworts
+- **Unternehmen & Disposition:** Kunden mit Anforderungen (Tätigkeit, Anzahl, Zeitraum, Ort, Schicht,
+  Staplerschein, Sprachen, Mobilität, Freitext). Pro Anforderung schlägt die App passende Mitarbeiter vor –
+  nach Pflichtangaben, Verfügbarkeit, Überschneidung mit anderen Einplanungen, Erfahrung, Nähe, früheren
+  Einsätzen beim Kunden, Kategorie und Bewertung. „Finger von lassen!" wird nicht vorgeschlagen,
+  Nationalität fließt nie ein. Ein- und Ausplanen steht im Verlauf des Mitarbeiters.
+- **KI-Empfehlung (optional):** wertet die besten zwölf Vorschläge zusätzlich mit einer Sprach-KI aus und
+  begründet die Auswahl. Die KI sieht nur Kürzel und fachliche Angaben – keine Namen, Kontaktdaten,
+  Notizen oder Nationalität.
 - **Sicherung:** täglicher Export aller Daten in einen S3-kompatiblen Speicher, zusätzlich Download für Administratoren
 
 ## Lokal starten
@@ -50,6 +58,14 @@ Ohne `DATABASE_URL` werden die Daten in `data/employees.json` abgelegt (nur für
 | `PORT`         | Port (Standard 3000).                                            |
 
 Deployment auf Render ist über `render.yaml` vorbereitet.
+
+## KI-Empfehlung einrichten
+
+| Variable     | Bedeutung                                                                 |
+| ------------ | ------------------------------------------------------------------------- |
+| `KI_API_KEY` | API-Schlüssel eines OpenAI-kompatiblen Dienstes. Ohne ihn gibt es nur die regelbasierten Vorschläge. |
+| `KI_MODEL`   | Modell, Standard `gpt-4o-mini`.                                            |
+| `KI_API_URL` | Chat-Completions-Endpunkt, Standard `https://api.openai.com/v1/chat/completions`. |
 
 ## Automatische Sicherung
 
