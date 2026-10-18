@@ -45,7 +45,12 @@
     </div>
   </header>
 
-  <div class="wrap">
+  <nav class="hauptnav" id="hauptnav">
+    <button type="button" class="tab" data-view="viewMitarbeiter" data-t="nav.mitarbeiter">Mitarbeiter</button>
+    <button type="button" class="tab" data-view="viewUnternehmen" data-t="nav.unternehmen">Unternehmen &amp; Disposition</button>
+  </nav>
+
+  <div class="wrap" id="viewMitarbeiter">
     <div class="stats" id="stats"></div>
     <div class="cats" id="cats"></div>
 
@@ -61,7 +66,103 @@
     <div class="tabelle" id="tabelle" hidden></div>
     <div class="empty" id="empty" hidden></div>
   </div>
+
+  <div class="wrap" id="viewUnternehmen" hidden>
+    <div class="stats" id="firmaStats"></div>
+    <div class="toolbar">
+      <input id="firmaSuche" class="grow" data-tp="firma.suche" placeholder="Suche: Unternehmen, Ort, Tätigkeit …" />
+      <select id="firmaFilter">
+        <option value="" data-t="firma.filterAlle">Alle Unternehmen</option>
+        <option value="offen" data-t="firma.filterOffen">Nur mit offenen Anforderungen</option>
+      </select>
+      <button class="primary" id="btnFirmaNeu" data-t="btn.firmaNeu">+ Unternehmen</button>
+    </div>
+    <div class="grid firmen" id="firmenGrid"></div>
+    <div class="empty" id="firmenLeer" hidden></div>
+  </div>
 </section>
+
+<dialog id="dlgFirma">
+  <form id="firmaForm">
+    <div class="dlg-head" id="firmaTitel">Unternehmen anlegen</div>
+    <div class="dlg-body">
+      <div class="felder">
+        <label class="full"><span data-t="firma.name">Name des Unternehmens</span> *<input name="name" required placeholder="z. B. Logistik Nord GmbH" /></label>
+        <label><span data-t="firma.branche">Branche</span><input name="branche" placeholder="z. B. Lager &amp; Logistik" /></label>
+        <label><span data-t="firma.adresse">Adresse / Einsatzort</span><input name="adresse" placeholder="Straße, PLZ Ort" /></label>
+        <label><span data-t="firma.ansprechpartner">Ansprechpartner</span><input name="ansprechpartner" placeholder="Name, Funktion" /></label>
+        <label><span data-t="firma.kontakt">Kontakt</span><input name="kontakt" placeholder="Telefon / E-Mail" /></label>
+        <label class="full"><span data-t="firma.notiz">Notiz zum Unternehmen</span>
+          <textarea name="notiz" rows="3" placeholder="z. B. Sicherheitsschuhe Pflicht, Einweisung am ersten Tag"></textarea>
+        </label>
+      </div>
+    </div>
+    <div class="dlg-foot" style="flex-wrap:wrap">
+      <div class="error" id="firmaError" style="flex-basis:100%;min-height:0"></div>
+      <button type="button" class="danger" id="btnFirmaLoeschen" hidden>Löschen</button>
+      <div style="margin-left:auto;display:flex;gap:10px">
+        <button type="button" id="btnFirmaAbbrechen">Abbrechen</button>
+        <button type="submit" class="primary">Speichern</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgAnf">
+  <form id="anfForm">
+    <div class="dlg-head" id="anfTitel">Anforderung anlegen</div>
+    <div class="dlg-body">
+      <div class="felder">
+        <label class="full"><span data-t="anf.taetigkeit">Tätigkeit</span> *<input name="taetigkeit" required placeholder="z. B. Kommissionierer, Staplerfahrer" /></label>
+        <label><span data-t="anf.anzahl">Anzahl Mitarbeiter</span><input name="anzahl" type="number" min="1" max="99" value="1" /></label>
+        <label><span data-t="anf.schicht">Schicht</span><input name="schicht" placeholder="z. B. Früh/Spät, 3-Schicht" /></label>
+        <label><span data-t="anf.von">Beginn</span><input name="von" type="date" /></label>
+        <label><span data-t="anf.bis">Ende</span><input name="bis" type="date" /></label>
+        <label><span data-t="anf.ort">Einsatzort</span><input name="ort" id="anfOrt" /></label>
+        <label><span data-t="anf.mobilitaet">Mobilität nötig</span><select name="mobilitaet" id="anfMobil"></select></label>
+        <label class="full"><span data-t="anf.sprachen">Sprachen (Pflicht)</span><input name="sprachen" placeholder="z. B. Deutsch, Englisch" /></label>
+        <div class="chkrow full">
+          <label><input type="checkbox" name="staplerschein" /> <span data-t="anf.staplerschein">Staplerschein Pflicht</span></label>
+          <label><input type="checkbox" name="schichtbereit" /> <span data-t="anf.schichtbereit">Schichtbereitschaft Pflicht</span></label>
+        </div>
+        <label class="full"><span data-t="anf.qualifikationen">Weitere Anforderungen &amp; Qualifikationen</span>
+          <textarea name="qualifikationen" rows="3" placeholder="z. B. Erfahrung mit Scanner, Kommissionierung, körperlich belastbar"></textarea>
+        </label>
+        <div class="chkrow full">
+          <label><input type="checkbox" name="abgeschlossen" /> <span data-t="anf.abgeschlossen">Abgeschlossen (Einsatz beendet oder abgesagt)</span></label>
+        </div>
+      </div>
+    </div>
+    <div class="dlg-foot" style="flex-wrap:wrap">
+      <div class="error" id="anfError" style="flex-basis:100%;min-height:0"></div>
+      <button type="button" class="danger" id="btnAnfLoeschen" hidden>Löschen</button>
+      <div style="margin-left:auto;display:flex;gap:10px">
+        <button type="button" id="btnAnfAbbrechen">Abbrechen</button>
+        <button type="submit" class="primary">Speichern</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgMatch">
+  <div class="dlg-head" id="matchTitel">Passende Mitarbeiter</div>
+  <div class="dlg-body log">
+    <div id="matchInfo"></div>
+    <div id="matchEingeplant"></div>
+    <div class="ki-box">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="button" class="primary" id="btnKi" data-t="btn.ki">KI-Empfehlung</button>
+        <span class="logmeta" id="kiStatus"></span>
+      </div>
+      <div id="kiErgebnis"></div>
+    </div>
+    <div class="error" id="matchError"></div>
+    <div id="matchListe"></div>
+  </div>
+  <div class="dlg-foot">
+    <div style="margin-left:auto"><button type="button" id="btnMatchClose">Schließen</button></div>
+  </div>
+</dialog>
 
 <dialog id="dlg">
   <form id="form">
