@@ -65,6 +65,7 @@ Deployment auf Render ist über `render.yaml` vorbereitet.
 | ------------ | ------------------------------------------------------------------------- |
 | `KI_API_KEY` | API-Schlüssel eines OpenAI-kompatiblen Dienstes. Ohne ihn gibt es nur die regelbasierten Vorschläge. |
 | `KI_MODEL`   | Modell, Standard `gpt-4o-mini`.                                            |
+| `KI_LIMIT_PRO_STUNDE` | Höchstzahl KI-Anfragen je Stunde (Standard 60), schützt das Kontingent. |
 | `KI_API_URL` | Chat-Completions-Endpunkt, Standard `https://api.openai.com/v1/chat/completions`. |
 
 ## Automatische Sicherung

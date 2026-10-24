@@ -1333,9 +1333,25 @@ async function setzeZuordnung(mitarbeiterId, einplanen) {
   const zugeordnet = einplanen ? [...d.anf.zugeordnet, mitarbeiterId] : d.anf.zugeordnet.filter((x) => x !== mitarbeiterId);
   try {
     await speichereFirma({ ...d.firma, anforderungen: d.firma.anforderungen.map((a) => (a.id === d.anf.id ? { ...a, zugeordnet } : a)) });
+    aktualisiereKiKnoepfe();
     await renderMatch();
   } catch (err) {
     $("matchError").textContent = err.message;
+  }
+}
+
+// Die KI-Liste wird nicht neu geladen – ihre Knöpfe müssen zur aktuellen Belegung passen.
+function aktualisiereKiKnoepfe() {
+  const d = matchDaten();
+  if (!d) return;
+  const voll = offenePlaetze(d.anf) === 0;
+  for (const li of $("kiErgebnis").querySelectorAll("li[data-id]")) {
+    const id = li.dataset.id;
+    const slot = li.querySelector(".ki-aktion");
+    if (!slot) continue;
+    slot.innerHTML = d.anf.zugeordnet.includes(id)
+      ? `<button data-ausplanen="${id}">Ausplanen</button>`
+      : `<button class="primary" data-einplanen="${id}"${voll ? " disabled title='Alle Plätze besetzt'" : ""}>Einplanen</button>`;
   }
 }
 
@@ -1359,20 +1375,16 @@ $("btnKi").onclick = async () => {
   $("kiStatus").textContent = "KI wertet die Kandidaten aus …";
   try {
     const r = await api(`/api/companies/${d.firma.id}/anforderungen/${d.anf.id}/ki`, { method: "POST" });
-    const voll = offenePlaetze(matchDaten()?.anf || d.anf) === 0;
     $("kiStatus").textContent = `Empfehlung der KI (${r.modell}) – bitte selbst prüfen.`;
     $("kiErgebnis").innerHTML =
       (r.empfehlungen.length
         ? `<ol class="ki-liste">${r.empfehlungen
             .map(
-              (e) => `<li><div class="treffer-kopf"><b>${esc(e.name)}</b><span class="actions" style="margin:0">${
-                d.anf.zugeordnet.includes(e.id)
-                  ? `<span class="tag ok">${esc(t("firma.eingeplant"))}</span>`
-                  : `<button class="primary" data-einplanen="${e.id}"${voll ? " disabled" : ""}>Einplanen</button>`
-              }<button data-profil="${e.id}">Profil</button></span></div><div class="logmeta">${esc(e.begruendung)}</div></li>`
+              (e) => `<li data-id="${e.id}"><div class="treffer-kopf"><b>${esc(e.name)}</b><span class="actions" style="margin:0"><span class="ki-aktion"></span><button data-profil="${e.id}">Profil</button></span></div><div class="logmeta">${esc(e.begruendung)}</div></li>`
             )
             .join("")}</ol>`
         : "<div class='logmeta'>Die KI hat niemanden empfohlen.</div>") + (r.hinweis ? `<div class="logmeta" style="margin-top:6px"><b>Hinweis:</b> ${esc(r.hinweis)}</div>` : "");
+    aktualisiereKiKnoepfe();
   } catch (err) {
     $("kiStatus").textContent = "";
     $("kiErgebnis").innerHTML = `<div class="error">${esc(err.message)}</div>`;

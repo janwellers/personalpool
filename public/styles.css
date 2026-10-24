@@ -123,6 +123,7 @@ label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute
 .treffer-kopf .badge{margin-top:0;margin-left:6px}
 .treffer .tags{margin:8px 0 0}
 .treffer .actions,.ki-liste .actions{display:flex;gap:8px;margin-top:8px}
+.ki-aktion{display:contents}
 .treffer .actions button,.ki-liste button{padding:6px 10px;font-size:13px}
 .treffer button:disabled{opacity:.5;cursor:not-allowed}
 .punkte{display:flex;align-items:center;gap:8px;font-size:13px}

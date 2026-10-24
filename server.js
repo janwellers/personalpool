@@ -416,9 +416,23 @@ app.get("/api/companies", requireUser, async (req, res, next) => {
   }
 });
 
+function pruefeUnternehmen(body) {
+  if (!String(body?.name || "").trim()) return "Name fehlt.";
+  for (const a of Array.isArray(body.anforderungen) ? body.anforderungen : []) {
+    const name = String(a?.taetigkeit || "").trim() || "Anforderung";
+    if (a?.von && a?.bis && String(a.bis) < String(a.von)) return `${name}: Das Ende liegt vor dem Beginn.`;
+    const plaetze = Math.max(1, Math.round(Number(a?.anzahl) || 1));
+    if (Array.isArray(a?.zugeordnet) && new Set(a.zugeordnet).size > plaetze) {
+      return `${name}: Mehr Mitarbeiter eingeplant als Plätze vorhanden. Bitte erst ausplanen.`;
+    }
+  }
+  return "";
+}
+
 app.post("/api/companies", requireUser, async (req, res, next) => {
   try {
-    if (!String(req.body?.name || "").trim()) return res.status(400).json({ ok: false, error: "Name fehlt." });
+    const fehler = pruefeUnternehmen(req.body);
+    if (fehler) return res.status(400).json({ ok: false, error: fehler });
     if (await findCompanyByName(req.body.name)) {
       return res.status(409).json({ ok: false, error: "Dieses Unternehmen gibt es schon." });
     }
@@ -430,7 +444,8 @@ app.post("/api/companies", requireUser, async (req, res, next) => {
 
 app.put("/api/companies/:id", requireUser, async (req, res, next) => {
   try {
-    if (!String(req.body?.name || "").trim()) return res.status(400).json({ ok: false, error: "Name fehlt." });
+    const fehler = pruefeUnternehmen(req.body);
+    if (fehler) return res.status(400).json({ ok: false, error: fehler });
     if (await findCompanyByName(req.body.name, req.params.id)) {
       return res.status(409).json({ ok: false, error: "Dieses Unternehmen gibt es schon." });
     }
@@ -470,8 +485,22 @@ app.get("/api/companies/:id/anforderungen/:aid/vorschlaege", requireUser, async 
   }
 });
 
+// Schutz des externen Kontingents: höchstens KI_LIMIT_PRO_STUNDE Aufrufe je Stunde für die ganze App.
+const KI_LIMIT_PRO_STUNDE = Math.max(1, Number(process.env.KI_LIMIT_PRO_STUNDE) || 60);
+const kiAufrufe = [];
+function kiKontingentFrei() {
+  const grenze = Date.now() - 3600_000;
+  while (kiAufrufe.length && kiAufrufe[0] < grenze) kiAufrufe.shift();
+  if (kiAufrufe.length >= KI_LIMIT_PRO_STUNDE) return false;
+  kiAufrufe.push(Date.now());
+  return true;
+}
+
 app.post("/api/companies/:id/anforderungen/:aid/ki", requireUser, async (req, res, next) => {
   try {
+    if (!kiKontingentFrei()) {
+      return res.status(429).json({ ok: false, error: "Stundenlimit für KI-Anfragen erreicht. Bitte später erneut versuchen." });
+    }
     const d = await dispositionsDaten(req);
     if (!d) return res.status(404).json({ ok: false, error: "Anforderung nicht gefunden." });
     res.json({ ok: true, ...(await kiEmpfehlung(d)) });

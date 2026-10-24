@@ -91,7 +91,7 @@ function bewerte({ firma, anf, m, kategorien, belegungen }) {
 
   if (anf.mobilitaet) {
     if (m.mobilitaet === anf.mobilitaet) plus(6, m.mobilitaet);
-    else plus(-8, m.mobilitaet ? `Mobilität: ${m.mobilitaet}` : "Mobilität unbekannt");
+    else fehlt.push(m.mobilitaet ? `Mobilität: ${m.mobilitaet} statt ${anf.mobilitaet}` : `Mobilität unbekannt (${anf.mobilitaet} nötig)`);
   }
 
   const nah = naehe(anf.ort || firma.adresse, m.wohnort);
@@ -208,7 +208,6 @@ export async function kiEmpfehlung({ firma, anf, kandidaten, mitarbeiter, katego
     sprachen: anf.sprachen,
     mobilitaet: anf.mobilitaet,
     anforderungen: anf.qualifikationen,
-    unternehmensNotiz: firma.notiz,
   };
 
   let res;
