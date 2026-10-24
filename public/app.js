@@ -17,6 +17,28 @@ const STANDARD_TEXTE = {
   "feld.einsatzEnde": "Einsatzende",
   "feld.notiz.kurz": "Notiz",
   "karte.details": "Weitere Angaben",
+  "karte.eingeplant": "Eingeplant",
+  "feld.einplanung": "Einplanung",
+  "firma.offen": "offen",
+  "firma.besetzt": "besetzt",
+  "firma.eingeplant": "Eingeplant",
+  "firma.bisher": "Bisher eingesetzt",
+  "firma.abgeschlossen": "Abgeschlossen",
+  "firma.keineAnf": "Noch keine Anforderungen.",
+  "firma.leer": "Noch keine Unternehmen erfasst. Lege oben rechts das erste an.",
+  "firma.keinTreffer": "Keine Unternehmen für diesen Filter.",
+  "firma.passend": "Passende Mitarbeiter",
+  "firma.anfNeu": "+ Anforderung",
+  "firma.bearbeiten": "Bearbeiten",
+  "zahl.firmen": "Unternehmen",
+  "zahl.anfOffen": "Offene Anforderungen",
+  "zahl.plaetze": "Offene Plätze",
+  "zahl.eingeplant": "Eingeplant",
+  "titel.firmaNeu": "Unternehmen anlegen",
+  "titel.firmaBearbeiten": "Unternehmen bearbeiten",
+  "titel.anfNeu": "Anforderung anlegen",
+  "titel.anfBearbeiten": "Anforderung bearbeiten",
+  "titel.match": "Passende Mitarbeiter",
   "liste.alle": "Alle",
   "liste.hinweise": "Hinweise",
   "liste.leer": "Noch keine Mitarbeiter erfasst. Lege oben rechts den ersten an.",
@@ -58,6 +80,7 @@ const VERLAUF_FELDER = {
   einsatzEnde: "feld.einsatzEnde",
   notiz: "feld.notiz.kurz",
   einsaetze: "feld.einsaetze",
+  einplanung: "feld.einplanung",
 };
 
 let konfig = { kategorien: [], mobilitaet: [], texte: {} };
@@ -66,6 +89,8 @@ const farbeOf = (kat) => kat?.farbe || "var(--accent)";
 
 let kategorien = [];
 let daten = [];
+let firmen = [];
+let kiAktiv = false;
 let filterKat = "alle";
 let editId = null;
 let ich = null;
@@ -158,6 +183,7 @@ function fillSelects() {
 
   $("selKat").innerHTML = optionen(kategorien.map((k) => [k.id, k.label]));
   $("selMobil").innerHTML = optionen([["", "–"], ...mobil]);
+  $("anfMobil").innerHTML = optionen([["", "egal"], ...mobil]);
   $("fMobil").innerHTML = optionen([["", t("filter.mobilEgal")], ...mobil]);
   $("fStapler").innerHTML = optionen([
     ["", t("filter.staplerEgal")],
@@ -310,6 +336,7 @@ function karteHtml(m) {
     m.staplerschein && t("feld.staplerschein"),
     m.schichtbereit && t("feld.schichtbereit"),
     m.wiedereinstellbar && t("feld.wiedereinstellbar"),
+    ...einplanungen(m.id).map(({ firma, anf }) => `${t("karte.eingeplant")}: ${firma.name} – ${anf.taetigkeit}`),
   ].filter(Boolean);
   const warnung =
     m.einsatzEnde && tageBis(m.einsatzEnde) <= WARNTAGE
@@ -833,6 +860,9 @@ const TEXT_GRUPPEN = [
   ["tab", "Reiter im Mitarbeiterformular"],
   ["karte", "Mitarbeiterkarte"],
   ["fristen", "Fristen"],
+  ["nav", "Navigation"],
+  ["firma", "Unternehmen-Seite"],
+  ["anf", "Anforderungen"],
 ];
 
 function katZeile(k = { id: "", label: "", farbe: "#4da3ff", hervorheben: false }) {
@@ -984,10 +1014,395 @@ $("btnExportCsv").onclick = () => {
   URL.revokeObjectURL(a.href);
 };
 
+// ---------- Unternehmen & Disposition ----------
+const navTabs = [...$("hauptnav").querySelectorAll(".tab")];
+function zeigeView(view) {
+  if (!navTabs.some((b) => b.dataset.view === view)) view = "viewMitarbeiter";
+  for (const b of navTabs) {
+    b.classList.toggle("active", b.dataset.view === view);
+    $(b.dataset.view).hidden = b.dataset.view !== view;
+  }
+  localStorage.setItem("personalpool.view", view);
+}
+for (const b of navTabs) b.onclick = () => zeigeView(b.dataset.view);
+
+const aktiveAnf = (firma) => (firma.anforderungen || []).filter((a) => !a.abgeschlossen);
+const offenePlaetze = (a) => Math.max(0, a.anzahl - a.zugeordnet.length);
+const nameVon = (id) => daten.find((m) => m.id === id)?.name || "?";
+
+function einplanungen(mitarbeiterId) {
+  return firmen.flatMap((firma) =>
+    aktiveAnf(firma)
+      .filter((a) => a.zugeordnet.includes(mitarbeiterId))
+      .map((anf) => ({ firma, anf }))
+  );
+}
+
+function zeitraumTage(a) {
+  if (!a.von && !a.bis) return "";
+  return `${a.von ? dtFormat(a.von) : "offen"} – ${a.bis ? dtFormat(a.bis) : "offen"}`;
+}
+
+function anfTags(a) {
+  return [
+    a.staplerschein && t("feld.staplerschein"),
+    a.schichtbereit && t("feld.schichtbereit"),
+    a.sprachen && `${t("feld.sprachen")}: ${a.sprachen}`,
+    a.mobilitaet && `${t("feld.mobilitaet")}: ${a.mobilitaet}`,
+  ]
+    .filter(Boolean)
+    .map((x) => `<span class="tag">${esc(x)}</span>`)
+    .join("");
+}
+
+function anfHtml(firma, a) {
+  const offen = offenePlaetze(a);
+  const meta = [zeitraumTage(a), a.ort, a.schicht].filter(Boolean).join(" · ");
+  const tags = anfTags(a);
+  return `<div class="anf${offen ? "" : " voll"}${a.abgeschlossen ? " abg" : ""}">
+    <div class="anf-kopf"><b>${esc(a.taetigkeit)}</b><span class="besetzt">${a.zugeordnet.length}/${a.anzahl} ${esc(t("firma.besetzt"))}</span></div>
+    ${meta ? `<div class="logmeta">${esc(meta)}</div>` : ""}
+    ${tags ? `<div class="tags">${tags}</div>` : ""}
+    ${a.qualifikationen ? `<div class="logmeta">${esc(a.qualifikationen)}</div>` : ""}
+    ${a.zugeordnet.length ? `<div class="anf-team">${esc(t("firma.eingeplant"))}: <b>${a.zugeordnet.map((id) => esc(nameVon(id))).join(", ")}</b></div>` : ""}
+    <div class="actions">
+      ${a.abgeschlossen ? "" : `<button class="primary" data-match="${firma.id}" data-aid="${a.id}">${esc(t("firma.passend"))}</button>`}
+      <button data-anf-edit="${firma.id}" data-aid="${a.id}">${esc(t("firma.bearbeiten"))}</button>
+    </div>
+  </div>`;
+}
+
+function historieVon(firma) {
+  const key = firma.name.trim().toLowerCase();
+  return daten.flatMap((m) =>
+    (m.einsaetze || []).filter((e) => (e.unternehmen || "").trim().toLowerCase() === key).map((e) => ({ m, e }))
+  );
+}
+
+function firmaHtml(firma) {
+  const aktiv = aktiveAnf(firma);
+  const erledigt = (firma.anforderungen || []).filter((a) => a.abgeschlossen);
+  const offen = aktiv.reduce((s, a) => s + offenePlaetze(a), 0);
+  const unter = [firma.branche, firma.adresse].filter(Boolean).join(" · ");
+  const kern = [
+    [t("firma.ansprechpartner"), firma.ansprechpartner],
+    [t("firma.kontakt"), firma.kontakt],
+  ].filter(([, w]) => w);
+  const historie = historieVon(firma);
+  return `<div class="card firma${offen ? " hat-offen" : ""}">
+    <div class="kopf">
+      <div><h3>${esc(firma.name)}</h3>${unter ? `<div class="sub">${esc(unter)}</div>` : ""}</div>
+      ${offen ? `<span class="badge offen">${offen} ${esc(t("firma.offen"))}</span>` : ""}
+    </div>
+    ${kern.length ? `<div class="kern">${kern.map(([l, w]) => `<span>${esc(l)}: <b>${esc(w)}</b></span>`).join("")}</div>` : ""}
+    ${firma.notiz ? `<div class="logmeta" style="margin-top:8px">${esc(firma.notiz)}</div>` : ""}
+    <div class="anf-liste">${aktiv.length ? aktiv.map((a) => anfHtml(firma, a)).join("") : `<div class="logmeta">${esc(t("firma.keineAnf"))}</div>`}</div>
+    ${
+      erledigt.length
+        ? `<details class="mehr"><summary>${esc(t("firma.abgeschlossen"))} (${erledigt.length})</summary>${erledigt.map((a) => anfHtml(firma, a)).join("")}</details>`
+        : ""
+    }
+    ${
+      historie.length
+        ? `<details class="mehr"><summary>${esc(t("firma.bisher"))} (${historie.length})</summary><ul class="historie">${historie
+            .map(({ m, e }) => `<li><b>${esc(m.name)}</b>${[e.taetigkeit, zeitraumText(e), e.ergebnis].filter(Boolean).map((x) => ` · ${esc(x)}`).join("")}</li>`)
+            .join("")}</ul></details>`
+        : ""
+    }
+    <div class="actions">
+      <button data-anf-neu="${firma.id}">${esc(t("firma.anfNeu"))}</button>
+      <button data-firma-edit="${firma.id}">${esc(t("firma.bearbeiten"))}</button>
+    </div>
+  </div>`;
+}
+
+function renderFirmen() {
+  const aktiv = firmen.flatMap(aktiveAnf);
+  const offeneAnf = aktiv.filter((a) => offenePlaetze(a) > 0);
+  const eingeplant = new Set(aktiv.flatMap((a) => a.zugeordnet));
+  $("firmaStats").innerHTML = [
+    [t("zahl.firmen"), firmen.length],
+    [t("zahl.anfOffen"), offeneAnf.length],
+    [t("zahl.plaetze"), aktiv.reduce((s, a) => s + offenePlaetze(a), 0)],
+    [t("zahl.eingeplant"), eingeplant.size],
+  ]
+    .map(([l, w]) => `<div class="stat">${esc(l)}: <b>${w}</b></div>`)
+    .join("");
+
+  const q = $("firmaSuche").value.trim().toLowerCase();
+  const nurOffen = $("firmaFilter").value === "offen";
+  const liste = firmen.filter((f) => {
+    if (nurOffen && !aktiveAnf(f).some((a) => offenePlaetze(a) > 0)) return false;
+    if (!q) return true;
+    return [f.name, f.branche, f.adresse, f.ansprechpartner, ...(f.anforderungen || []).flatMap((a) => [a.taetigkeit, a.ort, a.qualifikationen])]
+      .join(" ")
+      .toLowerCase()
+      .includes(q);
+  });
+  $("firmenGrid").innerHTML = liste.map(firmaHtml).join("");
+  $("firmenLeer").hidden = liste.length > 0;
+  $("firmenLeer").textContent = firmen.length ? t("firma.keinTreffer") : t("firma.leer");
+}
+$("firmaSuche").addEventListener("input", renderFirmen);
+$("firmaFilter").addEventListener("change", renderFirmen);
+
+$("firmenGrid").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.match) openMatch(b.dataset.match, b.dataset.aid);
+  else if (b.dataset.anfEdit) openAnf(b.dataset.anfEdit, b.dataset.aid);
+  else if (b.dataset.anfNeu) openAnf(b.dataset.anfNeu, null);
+  else if (b.dataset.firmaEdit) openFirma(b.dataset.firmaEdit);
+});
+
+async function speichereFirma(firma) {
+  const { company } = await api(`/api/companies/${firma.id}`, { method: "PUT", body: firma });
+  firmen = firmen.map((f) => (f.id === company.id ? company : f));
+  render();
+  renderFirmen();
+  return company;
+}
+
+// Unternehmen anlegen/bearbeiten
+const firmaForm = $("firmaForm");
+let firmaEditId = null;
+
+function openFirma(id) {
+  firmaEditId = id || null;
+  firmaForm.reset();
+  $("firmaError").textContent = "";
+  const f = firmen.find((x) => x.id === id);
+  $("firmaTitel").textContent = f ? t("titel.firmaBearbeiten") : t("titel.firmaNeu");
+  $("btnFirmaLoeschen").hidden = !f || !istAdmin();
+  if (f) for (const el of firmaForm.elements) if (el.name) el.value = f[el.name] ?? "";
+  $("dlgFirma").showModal();
+}
+
+firmaForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const felder = Object.fromEntries(new FormData(firmaForm).entries());
+  try {
+    if (firmaEditId) await speichereFirma({ ...firmen.find((f) => f.id === firmaEditId), ...felder });
+    else {
+      const { company } = await api("/api/companies", { method: "POST", body: { ...felder, anforderungen: [] } });
+      firmen = [...firmen, company].sort((a, b) => a.name.localeCompare(b.name));
+      renderFirmen();
+    }
+    $("dlgFirma").close();
+  } catch (err) {
+    $("firmaError").textContent = err.message;
+  }
+});
+$("btnFirmaNeu").onclick = () => openFirma(null);
+$("btnFirmaAbbrechen").onclick = () => $("dlgFirma").close();
+$("btnFirmaLoeschen").onclick = async () => {
+  const f = firmen.find((x) => x.id === firmaEditId);
+  if (!f || !confirm(`„${f.name}" samt allen Anforderungen und Einplanungen löschen?`)) return;
+  try {
+    await api(`/api/companies/${f.id}`, { method: "DELETE" });
+    $("dlgFirma").close();
+    await reload();
+  } catch (err) {
+    $("firmaError").textContent = err.message;
+  }
+};
+
+// Anforderung anlegen/bearbeiten
+const anfForm = $("anfForm");
+let anfCtx = null;
+
+function openAnf(firmaId, aid) {
+  const firma = firmen.find((f) => f.id === firmaId);
+  if (!firma) return;
+  const a = (firma.anforderungen || []).find((x) => x.id === aid);
+  anfCtx = { firmaId, aid: a ? a.id : null };
+  anfForm.reset();
+  $("anfError").textContent = "";
+  $("anfTitel").textContent = `${a ? t("titel.anfBearbeiten") : t("titel.anfNeu")} – ${firma.name}`;
+  $("anfOrt").placeholder = firma.adresse || "PLZ / Ort";
+  $("btnAnfLoeschen").hidden = !a;
+  if (a) {
+    for (const el of anfForm.elements) {
+      if (!el.name) continue;
+      if (el.type === "checkbox") el.checked = Boolean(a[el.name]);
+      else el.value = a[el.name] ?? "";
+    }
+  }
+  $("dlgAnf").showModal();
+}
+
+anfForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const firma = firmen.find((f) => f.id === anfCtx.firmaId);
+  const felder = Object.fromEntries(new FormData(anfForm).entries());
+  for (const k of ["staplerschein", "schichtbereit", "abgeschlossen"]) felder[k] = anfForm.elements[k].checked;
+  const alt = (firma.anforderungen || []).find((a) => a.id === anfCtx.aid);
+  const anf = { ...(alt || { zugeordnet: [] }), ...felder };
+  const anforderungen = alt ? firma.anforderungen.map((a) => (a.id === alt.id ? anf : a)) : [...(firma.anforderungen || []), anf];
+  try {
+    await speichereFirma({ ...firma, anforderungen });
+    $("dlgAnf").close();
+  } catch (err) {
+    $("anfError").textContent = err.message;
+  }
+});
+$("btnAnfAbbrechen").onclick = () => $("dlgAnf").close();
+$("btnAnfLoeschen").onclick = async () => {
+  const firma = firmen.find((f) => f.id === anfCtx.firmaId);
+  if (!firma || !confirm("Anforderung samt Einplanungen löschen?")) return;
+  try {
+    await speichereFirma({ ...firma, anforderungen: firma.anforderungen.filter((a) => a.id !== anfCtx.aid) });
+    $("dlgAnf").close();
+  } catch (err) {
+    $("anfError").textContent = err.message;
+  }
+};
+
+// Passende Mitarbeiter
+let matchCtx = null;
+const matchDaten = () => {
+  const firma = firmen.find((f) => f.id === matchCtx?.firmaId);
+  const anf = firma?.anforderungen?.find((a) => a.id === matchCtx.aid);
+  return anf ? { firma, anf } : null;
+};
+
+function trefferHtml(k, { eingeplant = false, voll = false } = {}) {
+  const kat = katOf(k.kategorie);
+  const tags = [
+    ...k.gruende.map((x) => `<span class="tag ok">${esc(x)}</span>`),
+    ...k.maengel.map((x) => `<span class="tag warn">${esc(x)}</span>`),
+    ...k.fehlt.map((x) => `<span class="tag fehlt">${esc(x)}</span>`),
+  ].join("");
+  const knopf = eingeplant
+    ? `<button data-ausplanen="${k.id}">Ausplanen</button>`
+    : `<button class="primary" data-einplanen="${k.id}"${voll ? " disabled title='Alle Plätze besetzt'" : ""}>Einplanen</button>`;
+  return `<div class="treffer${k.passend ? "" : " eingeschraenkt"}">
+    <div class="treffer-kopf">
+      <div><b>${esc(k.name)}</b> <span class="badge kat-${kat.id}">${esc(kat.label)}</span></div>
+      <div class="punkte" title="Übereinstimmung"><div class="balken"><span style="width:${k.punkte}%"></span></div><b>${k.punkte}</b></div>
+    </div>
+    ${tags ? `<div class="tags">${tags}</div>` : ""}
+    <div class="actions">${knopf}<button data-profil="${k.id}">Profil</button></div>
+  </div>`;
+}
+
+async function renderMatch() {
+  const d = matchDaten();
+  if (!d) return $("dlgMatch").close();
+  const { firma, anf } = d;
+  const voll = offenePlaetze(anf) === 0;
+  $("matchTitel").textContent = `${t("titel.match")}: ${anf.taetigkeit} – ${firma.name}`;
+  const meta = [zeitraumTage(anf), anf.ort || firma.adresse, anf.schicht].filter(Boolean).join(" · ");
+  $("matchInfo").innerHTML = `<div class="logmeta">${esc(meta)}${meta ? " · " : ""}<b>${anf.zugeordnet.length}/${anf.anzahl} ${esc(
+    t("firma.besetzt")
+  )}</b></div><div class="tags">${anfTags(anf)}</div>`;
+  $("btnKi").title = kiAktiv ? "" : "Die KI ist noch nicht eingerichtet.";
+  $("matchError").textContent = "";
+  try {
+    const r = await api(`/api/companies/${firma.id}/anforderungen/${anf.id}/vorschlaege`);
+    $("matchEingeplant").innerHTML = r.eingeplant.length
+      ? `<h4>${esc(t("firma.eingeplant"))}</h4>${r.eingeplant.map((k) => trefferHtml(k, { eingeplant: true })).join("")}`
+      : "";
+    const passend = r.kandidaten.filter((k) => k.passend);
+    const rest = r.kandidaten.filter((k) => !k.passend);
+    $("matchListe").innerHTML =
+      `<h4>Vorschläge (${passend.length} passend)</h4>` +
+      (passend.length ? passend.map((k) => trefferHtml(k, { voll })).join("") : "<div class='logmeta'>Niemand erfüllt alle Pflichtangaben.</div>") +
+      (rest.length
+        ? `<details class="mehr"><summary>Mit fehlenden Pflichtangaben (${rest.length})</summary>${rest.map((k) => trefferHtml(k, { voll })).join("")}</details>`
+        : "") +
+      (r.ausgeschlossen ? `<div class="logmeta" style="margin-top:10px">${r.ausgeschlossen} Mitarbeiter aus „${esc(katOf("finger").label)}" nicht vorgeschlagen.</div>` : "");
+  } catch (err) {
+    $("matchError").textContent = err.message;
+  }
+}
+
+function openMatch(firmaId, aid) {
+  matchCtx = { firmaId, aid };
+  $("kiErgebnis").innerHTML = "";
+  $("kiStatus").textContent = "";
+  $("matchEingeplant").innerHTML = "";
+  $("matchListe").innerHTML = "Lädt …";
+  $("dlgMatch").showModal();
+  renderMatch();
+}
+
+async function setzeZuordnung(mitarbeiterId, einplanen) {
+  const d = matchDaten();
+  if (!d) return;
+  const zugeordnet = einplanen ? [...d.anf.zugeordnet, mitarbeiterId] : d.anf.zugeordnet.filter((x) => x !== mitarbeiterId);
+  try {
+    await speichereFirma({ ...d.firma, anforderungen: d.firma.anforderungen.map((a) => (a.id === d.anf.id ? { ...a, zugeordnet } : a)) });
+    aktualisiereKiKnoepfe();
+    await renderMatch();
+  } catch (err) {
+    $("matchError").textContent = err.message;
+  }
+}
+
+// Die KI-Liste wird nicht neu geladen – ihre Knöpfe müssen zur aktuellen Belegung passen.
+function aktualisiereKiKnoepfe() {
+  const d = matchDaten();
+  if (!d) return;
+  const voll = offenePlaetze(d.anf) === 0;
+  for (const li of $("kiErgebnis").querySelectorAll("li[data-id]")) {
+    const id = li.dataset.id;
+    const slot = li.querySelector(".ki-aktion");
+    if (!slot) continue;
+    slot.innerHTML = d.anf.zugeordnet.includes(id)
+      ? `<button data-ausplanen="${id}">Ausplanen</button>`
+      : `<button class="primary" data-einplanen="${id}"${voll ? " disabled title='Alle Plätze besetzt'" : ""}>Einplanen</button>`;
+  }
+}
+
+$("dlgMatch").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.disabled) return;
+  if (b.dataset.einplanen) setzeZuordnung(b.dataset.einplanen, true);
+  else if (b.dataset.ausplanen) setzeZuordnung(b.dataset.ausplanen, false);
+  else if (b.dataset.profil) openDialog(b.dataset.profil);
+});
+
+$("btnKi").onclick = async () => {
+  const d = matchDaten();
+  if (!d) return;
+  $("kiErgebnis").innerHTML = "";
+  if (!kiAktiv) {
+    $("kiStatus").textContent = "Die KI ist noch nicht eingerichtet (Administrator: KI_API_KEY in Render hinterlegen). Die Vorschläge unten sind regelbasiert.";
+    return;
+  }
+  $("btnKi").disabled = true;
+  $("kiStatus").textContent = "KI wertet die Kandidaten aus …";
+  try {
+    const r = await api(`/api/companies/${d.firma.id}/anforderungen/${d.anf.id}/ki`, { method: "POST" });
+    $("kiStatus").textContent = `Empfehlung der KI (${r.modell}) – bitte selbst prüfen.`;
+    $("kiErgebnis").innerHTML =
+      (r.empfehlungen.length
+        ? `<ol class="ki-liste">${r.empfehlungen
+            .map(
+              (e) => `<li data-id="${e.id}"><div class="treffer-kopf"><b>${esc(e.name)}</b><span class="actions" style="margin:0"><span class="ki-aktion"></span><button data-profil="${e.id}">Profil</button></span></div><div class="logmeta">${esc(e.begruendung)}</div></li>`
+            )
+            .join("")}</ol>`
+        : "<div class='logmeta'>Die KI hat niemanden empfohlen.</div>") + (r.hinweis ? `<div class="logmeta" style="margin-top:6px"><b>Hinweis:</b> ${esc(r.hinweis)}</div>` : "");
+    aktualisiereKiKnoepfe();
+  } catch (err) {
+    $("kiStatus").textContent = "";
+    $("kiErgebnis").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+  } finally {
+    $("btnKi").disabled = false;
+  }
+};
+$("btnMatchClose").onclick = () => $("dlgMatch").close();
+
 // ---------- Start ----------
 async function reload() {
-  daten = (await api("/api/employees")).employees;
+  const [ma, fi] = await Promise.all([api("/api/employees"), api("/api/companies")]);
+  daten = ma.employees;
+  firmen = fi.companies;
+  kiAktiv = fi.kiAktiv;
   render();
+  renderFirmen();
+  if ($("dlgMatch").open) renderMatch();
 }
 
 async function start() {
@@ -1019,6 +1434,7 @@ async function start() {
   $("btnPasswort").hidden = !ich || ich.team;
   renderBearbeiter();
   fillSelects();
+  zeigeView(localStorage.getItem("personalpool.view") || "viewMitarbeiter");
   await reload();
 }
 

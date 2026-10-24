@@ -14,6 +14,7 @@ const DOC_DIR = join(DATA_DIR, "docs");
 const USER_FILE = join(DATA_DIR, "users.json");
 const SECRET_FILE = join(DATA_DIR, "session-secret");
 const SETTINGS_FILE = join(DATA_DIR, "settings.json");
+const COMPANY_FILE = join(DATA_DIR, "companies.json");
 
 const usePg = Boolean(process.env.DATABASE_URL);
 export const storageBackend = usePg ? "postgres" : "file";
@@ -496,6 +497,7 @@ export async function exportAll({ mitDokumenten = true } = {}) {
     dokumente,
     benutzer: await listUsers(),
     konfiguration: await getKonfiguration(),
+    unternehmen: await listCompanies(),
   };
 }
 
@@ -682,6 +684,15 @@ export async function initStore() {
     )
   `);
   await pool.query("CREATE TABLE IF NOT EXISTS app_settings (schluessel TEXT PRIMARY KEY, wert TEXT NOT NULL)");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      daten JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
   await pool.query("CREATE INDEX IF NOT EXISTS employee_documents_employee_idx ON employee_documents (employee_id)");
   await pool.query("CREATE INDEX IF NOT EXISTS employee_events_employee_idx ON employee_events (employee_id, created_at DESC)");
   await getKonfiguration();
@@ -789,6 +800,7 @@ export async function deleteEmployee(id, akteur) {
   if (usePg) {
     const { rowCount } = await pool.query("DELETE FROM employees WHERE id = $1", [id]);
     if (!rowCount) return false;
+    await entferneZuordnungen(id);
     await deleteEvents(id);
     await logEvent({ employeeId: null, employeeName: "(gelöschter Datensatz)", aktion: "gelöscht", akteur });
     return true;
@@ -800,7 +812,170 @@ export async function deleteEmployee(id, akteur) {
   const docs = await readDocs();
   for (const d of docs.filter((d) => d.employeeId === id)) await rm(join(DOC_DIR, d.id), { force: true });
   await writeDocs(docs.filter((d) => d.employeeId !== id));
+  await entferneZuordnungen(id);
   await deleteEvents(id);
   await logEvent({ employeeId: null, employeeName: "(gelöschter Datensatz)", aktion: "gelöscht", akteur });
   return true;
+}
+
+// ---------- Unternehmen und Anforderungen ----------
+const alsTag = (wert) => (/^\d{4}-\d{2}-\d{2}$/.test(String(wert || "")) ? String(wert) : "");
+
+function normalizeAnforderung(a, mitarbeiterIds) {
+  const zugeordnet = Array.isArray(a.zugeordnet) ? a.zugeordnet.map(String) : [];
+  return {
+    id: /^[\w-]{1,64}$/.test(String(a.id || "")) ? String(a.id) : randomUUID(),
+    taetigkeit: kuerzen(a.taetigkeit, 120),
+    anzahl: Math.min(99, Math.max(1, Math.round(Number(a.anzahl) || 1))),
+    von: alsTag(a.von),
+    bis: alsTag(a.bis),
+    ort: kuerzen(a.ort, 160),
+    schicht: kuerzen(a.schicht, 80),
+    staplerschein: Boolean(a.staplerschein),
+    schichtbereit: Boolean(a.schichtbereit),
+    sprachen: kuerzen(a.sprachen, 160),
+    mobilitaet: kuerzen(a.mobilitaet, 80),
+    qualifikationen: String(a.qualifikationen || "").trim().slice(0, 2000),
+    abgeschlossen: Boolean(a.abgeschlossen),
+    zugeordnet: [...new Set(zugeordnet)].filter((id) => mitarbeiterIds.has(id)),
+  };
+}
+
+function normalizeCompany(input, mitarbeiterIds) {
+  return {
+    name: kuerzen(input.name, 120),
+    branche: kuerzen(input.branche, 120),
+    adresse: kuerzen(input.adresse, 200),
+    ansprechpartner: kuerzen(input.ansprechpartner, 120),
+    kontakt: kuerzen(input.kontakt, 160),
+    notiz: String(input.notiz || "").trim().slice(0, 2000),
+    anforderungen: (Array.isArray(input.anforderungen) ? input.anforderungen : [])
+      .map((a) => normalizeAnforderung(a || {}, mitarbeiterIds))
+      .filter((a) => a.taetigkeit),
+  };
+}
+
+const zeitstempel = (v) => (v instanceof Date ? v.toISOString() : v);
+const companyRow = (r) => ({ id: r.id, ...r.daten, createdAt: zeitstempel(r.created_at), updatedAt: zeitstempel(r.updated_at) });
+
+async function readCompanies() {
+  try {
+    const parsed = JSON.parse(await readFile(COMPANY_FILE, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeCompanies(list) {
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(COMPANY_FILE, JSON.stringify(list, null, 2));
+}
+
+export async function listCompanies() {
+  if (usePg) return (await pool.query("SELECT * FROM companies ORDER BY name ASC")).rows.map(companyRow);
+  return (await readCompanies()).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+}
+
+export async function getCompany(id) {
+  return (await listCompanies()).find((c) => c.id === id) || null;
+}
+
+export async function findCompanyByName(name, exceptId = null) {
+  const key = schluessel(name);
+  return (await listCompanies()).find((c) => c.id !== exceptId && schluessel(c.name) === key) || null;
+}
+
+async function speichereCompany(id, daten, neu) {
+  if (usePg) {
+    const { rows } = neu
+      ? await pool.query("INSERT INTO companies (id, name, daten) VALUES ($1,$2,$3) RETURNING *", [id, daten.name, JSON.stringify(daten)])
+      : await pool.query("UPDATE companies SET name=$2, daten=$3, updated_at=now() WHERE id=$1 RETURNING *", [id, daten.name, JSON.stringify(daten)]);
+    return rows[0] ? companyRow(rows[0]) : null;
+  }
+  const list = await readCompanies();
+  const now = new Date().toISOString();
+  const idx = list.findIndex((c) => c.id === id);
+  if (neu) list.push({ id, ...daten, createdAt: now, updatedAt: now });
+  else if (idx < 0) return null;
+  else list[idx] = { id, ...daten, createdAt: list[idx].createdAt, updatedAt: now };
+  await writeCompanies(list);
+  return list.find((c) => c.id === id);
+}
+
+const einplanungText = (firma, a) => `${firma} – ${a.taetigkeit}`;
+
+// Jede Einplanung und Ausplanung landet im Verlauf des betroffenen Mitarbeiters.
+async function protokolliereZuordnungen(vorher, nachher, akteur) {
+  const paare = (c) =>
+    new Map((c?.anforderungen || []).flatMap((a) => a.zugeordnet.map((mid) => [`${a.id}|${mid}`, { a, mid, firma: c.name }])));
+  const alt = paare(vorher);
+  const neu = paare(nachher);
+  const namen = new Map((await listEmployees()).map((m) => [m.id, m.name]));
+  for (const [key, { a, mid, firma }] of neu) {
+    if (alt.has(key) || !namen.has(mid)) continue;
+    await logEvent({
+      employeeId: mid,
+      employeeName: namen.get(mid),
+      aktion: "eingeplant",
+      akteur,
+      aenderungen: [{ feld: "einplanung", vorher: "", nachher: einplanungText(firma, a) }],
+    });
+  }
+  for (const [key, { a, mid, firma }] of alt) {
+    if (neu.has(key) || !namen.has(mid)) continue;
+    await logEvent({
+      employeeId: mid,
+      employeeName: namen.get(mid),
+      aktion: "ausgeplant",
+      akteur,
+      aenderungen: [{ feld: "einplanung", vorher: einplanungText(firma, a), nachher: "" }],
+    });
+  }
+}
+
+const mitarbeiterIdSet = async () => new Set((await listEmployees()).map((m) => m.id));
+
+export async function createCompany(input, akteur) {
+  const daten = normalizeCompany(input, await mitarbeiterIdSet());
+  const company = await speichereCompany(randomUUID(), daten, true);
+  await logEvent({ employeeId: null, employeeName: `Unternehmen: ${company.name}`, aktion: "angelegt", akteur });
+  await protokolliereZuordnungen(null, company, akteur);
+  return company;
+}
+
+export async function updateCompany(id, input, akteur) {
+  const vorher = await getCompany(id);
+  if (!vorher) return null;
+  const company = await speichereCompany(id, normalizeCompany(input, await mitarbeiterIdSet()), false);
+  await logEvent({ employeeId: null, employeeName: `Unternehmen: ${company.name}`, aktion: "geändert", akteur });
+  await protokolliereZuordnungen(vorher, company, akteur);
+  return company;
+}
+
+export async function deleteCompany(id, akteur) {
+  const vorher = await getCompany(id);
+  if (!vorher) return false;
+  if (usePg) await pool.query("DELETE FROM companies WHERE id = $1", [id]);
+  else await writeCompanies((await readCompanies()).filter((c) => c.id !== id));
+  await logEvent({ employeeId: null, employeeName: `Unternehmen: ${vorher.name}`, aktion: "gelöscht", akteur });
+  await protokolliereZuordnungen(vorher, null, akteur);
+  return true;
+}
+
+async function entferneZuordnungen(employeeId) {
+  for (const c of await listCompanies()) {
+    if (!c.anforderungen?.some((a) => a.zugeordnet.includes(employeeId))) continue;
+    const { id, createdAt, updatedAt, ...daten } = c;
+    daten.anforderungen = daten.anforderungen.map((a) => ({ ...a, zugeordnet: a.zugeordnet.filter((x) => x !== employeeId) }));
+    await speichereCompany(id, daten, false);
+  }
+}
+
+export async function einplanungenVon(employeeId) {
+  return (await listCompanies()).flatMap((c) =>
+    (c.anforderungen || [])
+      .filter((a) => a.zugeordnet.includes(employeeId))
+      .map((a) => ({ unternehmen: c.name, taetigkeit: a.taetigkeit, von: a.von, bis: a.bis, abgeschlossen: a.abgeschlossen }))
+  );
 }

@@ -28,7 +28,15 @@ import {
   setKonfiguration,
   belegteKategorien,
   normalisiereKonfig,
+  listCompanies,
+  getCompany,
+  findCompanyByName,
+  createCompany,
+  updateCompany,
+  deleteCompany,
+  einplanungenVon,
 } from "./store.js";
+import { vorschlaege, kiEmpfehlung, kiAktiv } from "./matching.js";
 import { backupKonfiguriert, erstelleSicherung, sicherungsStatus, starteSicherungsplan } from "./backup.js";
 import {
   checkPassword,
@@ -358,6 +366,7 @@ app.get("/api/employees/:id/auskunft", requireUser, async (req, res, next) => {
       stammdaten: employee,
       aenderungsverlauf: await listEvents({ employeeId: employee.id, limit: null }),
       dokumente: await listDocuments(employee.id),
+      einplanungen: await einplanungenVon(employee.id),
     };
     const datei = `auskunft-${employee.name.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase() || "mitarbeiter"}.json`;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -393,6 +402,108 @@ app.get("/api/backup/download", requireUser, requireAdmin, async (req, res, next
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(datei)}`);
     res.send(JSON.stringify(daten, null, 2));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------- Unternehmen und Disposition ----------
+app.get("/api/companies", requireUser, async (req, res, next) => {
+  try {
+    res.json({ ok: true, companies: await listCompanies(), kiAktiv: kiAktiv() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function pruefeUnternehmen(body) {
+  if (!String(body?.name || "").trim()) return "Name fehlt.";
+  for (const a of Array.isArray(body.anforderungen) ? body.anforderungen : []) {
+    const name = String(a?.taetigkeit || "").trim() || "Anforderung";
+    if (a?.von && a?.bis && String(a.bis) < String(a.von)) return `${name}: Das Ende liegt vor dem Beginn.`;
+    const plaetze = Math.max(1, Math.round(Number(a?.anzahl) || 1));
+    if (Array.isArray(a?.zugeordnet) && new Set(a.zugeordnet).size > plaetze) {
+      return `${name}: Mehr Mitarbeiter eingeplant als Plätze vorhanden. Bitte erst ausplanen.`;
+    }
+  }
+  return "";
+}
+
+app.post("/api/companies", requireUser, async (req, res, next) => {
+  try {
+    const fehler = pruefeUnternehmen(req.body);
+    if (fehler) return res.status(400).json({ ok: false, error: fehler });
+    if (await findCompanyByName(req.body.name)) {
+      return res.status(409).json({ ok: false, error: "Dieses Unternehmen gibt es schon." });
+    }
+    res.status(201).json({ ok: true, company: await createCompany(req.body, akteurOf(req)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.put("/api/companies/:id", requireUser, async (req, res, next) => {
+  try {
+    const fehler = pruefeUnternehmen(req.body);
+    if (fehler) return res.status(400).json({ ok: false, error: fehler });
+    if (await findCompanyByName(req.body.name, req.params.id)) {
+      return res.status(409).json({ ok: false, error: "Dieses Unternehmen gibt es schon." });
+    }
+    const company = await updateCompany(req.params.id, req.body, akteurOf(req));
+    if (!company) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
+    res.json({ ok: true, company });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete("/api/companies/:id", requireUser, requireAdmin, async (req, res, next) => {
+  try {
+    if (!(await deleteCompany(req.params.id, akteurOf(req)))) return res.status(404).json({ ok: false, error: "Nicht gefunden." });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+async function dispositionsDaten(req) {
+  const firma = await getCompany(req.params.id);
+  const anf = firma?.anforderungen?.find((a) => a.id === req.params.aid);
+  if (!anf) return null;
+  const [mitarbeiter, firmen, konfig] = await Promise.all([listEmployees(), listCompanies(), getKonfiguration()]);
+  const kategorien = konfig.kategorien;
+  return { firma, anf, mitarbeiter, kategorien, ...vorschlaege({ firma, anf, mitarbeiter, firmen, kategorien }) };
+}
+
+app.get("/api/companies/:id/anforderungen/:aid/vorschlaege", requireUser, async (req, res, next) => {
+  try {
+    const d = await dispositionsDaten(req);
+    if (!d) return res.status(404).json({ ok: false, error: "Anforderung nicht gefunden." });
+    res.json({ ok: true, eingeplant: d.eingeplant, kandidaten: d.kandidaten, ausgeschlossen: d.ausgeschlossen, kiAktiv: kiAktiv() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Schutz des externen Kontingents: höchstens KI_LIMIT_PRO_STUNDE Aufrufe je Stunde für die ganze App.
+const KI_LIMIT_PRO_STUNDE = Math.max(1, Number(process.env.KI_LIMIT_PRO_STUNDE) || 60);
+const kiAufrufe = [];
+function kiKontingentFrei() {
+  const grenze = Date.now() - 3600_000;
+  while (kiAufrufe.length && kiAufrufe[0] < grenze) kiAufrufe.shift();
+  if (kiAufrufe.length >= KI_LIMIT_PRO_STUNDE) return false;
+  kiAufrufe.push(Date.now());
+  return true;
+}
+
+app.post("/api/companies/:id/anforderungen/:aid/ki", requireUser, async (req, res, next) => {
+  try {
+    if (!kiKontingentFrei()) {
+      return res.status(429).json({ ok: false, error: "Stundenlimit für KI-Anfragen erreicht. Bitte später erneut versuchen." });
+    }
+    const d = await dispositionsDaten(req);
+    if (!d) return res.status(404).json({ ok: false, error: "Anforderung nicht gefunden." });
+    res.json({ ok: true, ...(await kiEmpfehlung(d)) });
   } catch (err) {
     next(err);
   }

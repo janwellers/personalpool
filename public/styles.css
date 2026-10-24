@@ -93,6 +93,47 @@ label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute
 .textzeile{display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:10px;align-items:center;margin-bottom:6px}
 .textzeile .logmeta{overflow-wrap:anywhere}
 
+.hauptnav{display:flex;gap:4px;padding:0 22px;border-bottom:1px solid var(--line);background:var(--panel);overflow-x:auto}
+.hauptnav .tab{padding:12px 14px;font-size:15px}
+.card.firma{border-left-color:var(--line)}
+.card.firma.hat-offen{border-left-color:var(--accent)}
+.card.firma .sub{margin-top:4px}
+.badge.offen{background:var(--accent);color:#08121d;margin-top:0}
+.anf-liste{display:grid;gap:8px;margin-top:12px}
+.anf{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px}
+.anf-liste .anf{margin-top:0}
+.anf.voll{border-color:#2f6b4a}
+.anf.abg{opacity:.7}
+.anf-kopf{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.anf-kopf .besetzt{font-size:12px;color:var(--muted);white-space:nowrap}
+.anf.voll .besetzt{color:#6fd39b}
+.anf .logmeta{margin-top:4px}
+.anf .tags{margin:6px 0 0}
+.anf-team{font-size:13px;margin-top:6px;color:var(--muted)}
+.anf-team b{color:var(--text);font-weight:600}
+.anf .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.anf .actions button{padding:6px 10px;font-size:13px}
+.historie{margin:6px 0 0 18px;padding:0;font-size:13px}
+.tag.ok{border-color:#2f6b4a;color:#8fe0b1;background:#14261c}
+.tag.fehlt{border-color:#6b2f2f;color:#ff9c8e;background:#2a1616}
+#dlgMatch h4{margin:16px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.treffer{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)}
+.treffer.eingeschraenkt{opacity:.8}
+.treffer-kopf{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.treffer-kopf .badge{margin-top:0;margin-left:6px}
+.treffer .tags{margin:8px 0 0}
+.treffer .actions,.ki-liste .actions{display:flex;gap:8px;margin-top:8px}
+.ki-aktion{display:contents}
+.treffer .actions button,.ki-liste button{padding:6px 10px;font-size:13px}
+.treffer button:disabled{opacity:.5;cursor:not-allowed}
+.punkte{display:flex;align-items:center;gap:8px;font-size:13px}
+.balken{width:90px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.balken span{display:block;height:100%;background:var(--accent)}
+.ki-box{border:1px solid #2b4a6b;background:#13202e;border-radius:10px;padding:12px;margin:14px 0}
+.ki-liste{margin:10px 0 0 18px;padding:0}
+.ki-liste li{margin-bottom:10px}
+.ki-liste .logmeta{margin-top:3px}
+
 @media (max-width:700px){
   header{padding:12px 14px;gap:10px}
   header>div:last-child{width:100%;display:grid;grid-template-columns:repeat(2,1fr)}
@@ -110,6 +151,7 @@ label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute
   .dlg-body{flex:1;max-height:none;overflow-y:auto}
   .felder{grid-template-columns:1fr}
   .tabs{padding:0 6px}
+  .hauptnav{padding:0 8px}
   .dlg-foot{flex-wrap:wrap}
   .dlg-foot>div{width:100%;display:flex;gap:10px}
   .dlg-foot button{flex:1}
